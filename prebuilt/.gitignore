@@ -1,0 +1,4 @@
+# Binários gerados fora da árvore (kernel, DTB, resource.img do aparelho). Nada disso vai
+# para o repositório: ver README.md.
+*
+!.gitignore

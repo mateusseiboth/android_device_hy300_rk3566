@@ -1,0 +1,9 @@
+<!--
+    Manifesto VINTF do HY300. target-level 8 (FCM do Android 14) porque, no Android 17
+    (android-17.0.0_r1, hardware/interfaces/compatibility_matrices/Android.bp), o kernel
+    6.1 só aparece na matriz de nível 8 (kernel_config_u_5.15 e kernel_config_u_6.1);
+    os níveis 202404 em diante pedem 6.6, 6.12 ou 6.18.
+    Os HALs entram pelos vintf_fragments de cada módulo (drm_hwcomposer, minigbm etc.).
+-->
+<manifest version="8.0" type="device" target-level="8">
+</manifest>

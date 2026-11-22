@@ -1,0 +1,8 @@
+//
+// SPDX-FileCopyrightText: 2026 Mateus Seiboth
+// SPDX-License-Identifier: Apache-2.0
+//
+
+// device.mk põe este diretório em PRODUCT_SOONG_NAMESPACES.
+soong_namespace {
+}

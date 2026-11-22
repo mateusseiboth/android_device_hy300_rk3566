@@ -1,0 +1,59 @@
+# Controle IR do HY300: remotectl-pwm no PWM3 (dispositivo de entrada "fdd70030.pwm").
+#
+# Escrito a partir das tabelas rockchip,key_table do arch/arm64/boot/dts/rockchip/
+# rk3566-hy300.dts (branch hy300-6.1): ali cada código IR vira um código Linux, e aqui o
+# código Linux vira a tecla do Android. Os papéis das teclas F* seguem o que a ROM de
+# fábrica fazia com elas (reverse-engineering/MAP.md):
+#   F6  = abrir a entrada HDMI;  F12 = abrir as configurações do projetor (o app
+#   io.github.hy300.settings atende o F12 pelo serviço de acessibilidade).
+
+# Números
+key 2     1
+key 3     2
+key 4     3
+key 5     4
+key 6     5
+key 7     6
+key 8     7
+key 9     8
+key 10    9
+key 11    0
+
+# Navegação
+key 103   DPAD_UP
+key 108   DPAD_DOWN
+key 105   DPAD_LEFT
+key 106   DPAD_RIGHT
+# KEY_REPLY: o "OK" dos controles da TXCZ
+key 232   DPAD_CENTER
+key 28    ENTER
+key 158   BACK
+key 102   HOME
+key 139   MENU
+key 116   POWER
+
+# Volume
+key 115   VOLUME_UP
+key 114   VOLUME_DOWN
+key 113   VOLUME_MUTE
+
+# Teclas de função dos controles da TXCZ
+# KEY_F7: o framework da TXCZ tratava F7/F8 como foco (MaDaDialog, que nunca funcionou)
+key 65    F7
+key 87    F11
+key 88    F12
+# KEY_KPRIGHTPAREN, KEY_REDO, KEY_F14
+key 180   F1
+key 182   F3
+key 184   F5
+# KEY_F15 e KEY_F16: subir/descer, como na fábrica
+key 185   DPAD_UP
+key 186   DPAD_DOWN
+# KEY_F17: fonte (entrada HDMI)
+key 187   F6
+# KEY_F18: configurações
+key 188   F12
+# KEY_F19
+key 189   F11
+# KEY_TEXT
+key 388   PROFILE_SWITCH

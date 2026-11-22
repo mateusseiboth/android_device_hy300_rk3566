@@ -1,0 +1,16 @@
+# ueventd do HY300 (instalado como /vendor/etc/ueventd.rc). Só os nós que esta placa usa.
+
+# Bluetooth do AIC8800 na UART1
+/dev/ttyS1                0660   bluetooth  bluetooth
+
+# Vendor storage da Rockchip (id 50 = modo de instalação, lido pelo U-Boot para girar o logo)
+/dev/vendor_storage       0660   system     system
+
+# Decodificador/codificador de vídeo da Rockchip (mpp_service) e RGA
+/dev/mpp_service          0660   media      media
+/dev/rga                  0660   system     graphics
+
+# Entrada HDMI (RK628 -> rkcif/rkisp): para o HAL de TV input/câmera
+/dev/video*               0660   system     camera
+/dev/v4l-subdev*          0660   system     camera
+/dev/media*               0660   system     camera

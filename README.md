@@ -48,10 +48,11 @@ python3 -I -m unittest discover -s device/hy300/rk3566/tools/tests
   mesmo e trava com o do 6.1. O kernel ignora esse DT e usa o embutido
   (`CONFIG_HY300_BUILTIN_DTB`). Por isso o resource é fixo e não é reempacotado no build.
 - **Kernel comprimido** (`Image.gz`): a partição `boot` tem 40 MiB e a `Image` do 6.1 tem
-  38,8 MiB. O U-Boot tem gzip/lz4 no `bootm`; falta confirmar no slot `recovery`.
+  34,9 MiB (base Android `hy300-ack-6.1`; `gzip -9`: 15,2 MB). O U-Boot tem gzip/lz4 no `bootm`; falta confirmar no slot `recovery`.
 - **cmdline**: vem toda do boot.img. `androidboot.hardware=rk3566` (dá nome ao `fstab` e ao
-  `init.rk3566.rc`); `androidboot.boot_devices=fe310000.mmc`, que é o nome do eMMC no 6.1
-  (no 4.19 era `fe310000.sdhci`).
+  `init.rk3566.rc`); `androidboot.boot_devices=fe310000.sdhci`, que é o nome do eMMC na base
+  Android do kernel (`hy300-ack-6.1`), igual ao 4.19 de fábrica (no BSP Linux era
+  `fe310000.mmc`).
 - Sem AVB e sem dtbo própria: a `vbmeta` e a `dtbo` de fábrica ficam intocadas.
 
 ## Partições
@@ -74,7 +75,7 @@ Sem A/B (a fábrica não é A/B). Sem `vendor_dlkm`/`odm_dlkm`: os módulos vão
 
 | Arquivo | De onde vem |
 |---|---|
-| `Image.gz` | build do kernel `hy300` (`gzip -9 -n arch/arm64/boot/Image`) |
+| `Image.gz` | build do kernel `hy300-ack-6.1` (`KBASE=ack kernel/build-marco1.sh` no repositório do projeto, saída em `~/hy300-work/kbuild-ack-6.1`; depois `gzip -9 -n arch/arm64/boot/Image`) |
 | `dtb/*.dtb` | qualquer DTB: a seção dtb do header v2 é exigida pelo mkbootimg, mas o U-Boot não a usa. Usar o `rk3566-hy300.dtb` do build |
 | `resource.img` | a seção `second` do `boot.img` do próprio aparelho, já com o logo da capivara: `tools/mkboot.py unpack ~/hy300-backup/boot.img /tmp/boot` (repositório do projeto) e copiar o arquivo da seção second |
 

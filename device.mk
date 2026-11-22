@@ -11,7 +11,8 @@ $(call inherit-product, $(SRC_TARGET_DIR)/product/core_64_bit_only.mk)
 # A fábrica saiu com Android 12 (ro.product.first_api_level=31).
 PRODUCT_SHIPPING_API_LEVEL := 31
 
-# Kernel não-GKI (BSP Rockchip 6.1): a OTA não exige os requisitos de config do kernel.
+# Kernel não-GKI (ACK android14-6.1 com o BSP Rockchip, prebuilt): o .config atende o
+# kernel/configs/u/android-6.1, mas o build não tem o .config do prebuilt para conferir.
 PRODUCT_OTA_ENFORCE_VINTF_KERNEL_REQUIREMENTS := false
 
 PRODUCT_USE_DYNAMIC_PARTITIONS := true

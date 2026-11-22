@@ -19,11 +19,14 @@ TARGET_BOARD_PLATFORM := rk356x
 TARGET_BOOTLOADER_BOARD_NAME := rk30board
 TARGET_NO_BOOTLOADER := false
 
-# Kernel: prebuilt do nosso build (branch hy300 do kernel-hy300-rk3566), copiado para
-# prebuilt/ por fora; o arquivo não vai para o git. Comprimido porque a partição boot
-# tem 40 MiB e a Image crua do 6.1 tem 38,8 MiB (gzip -9: 14,5 MB). O U-Boot de fábrica
-# tem código de gzip e lz4 no bootm (strings do uboot.img), mas isso só vale depois de
-# testado no slot recovery.
+# Kernel: prebuilt do nosso build, copiado para prebuilt/ por fora; o arquivo não vai para o
+# git. Fonte: branch hy300-ack-6.1 do kernel-hy300-rk3566 (kernel Android da Rockchip: ACK
+# android14-6.1 + BSP develop-6.1, 6.1.172), rockchip_defconfig + android-14.config +
+# rk3566_hy300.config, clang-r547379 (KBASE=ack no kernel/build-marco1.sh do projeto).
+# Comprimido porque a partição boot tem 40 MiB e a Image crua tem 34,9 MiB (gzip -9:
+# 15,2 MB); somada ao ramdisk e ao resource ela não cabe. O U-Boot de fábrica tem código de
+# gzip e lz4 no bootm (strings do uboot.img), mas isso só vale depois de testado no slot
+# recovery.
 TARGET_NO_KERNEL := false
 TARGET_PREBUILT_KERNEL := $(DEVICE_PATH)/prebuilt/Image.gz
 BOARD_KERNEL_IMAGE_NAME := Image.gz
@@ -61,13 +64,14 @@ BOARD_PREBUILT_DTBIMAGE_DIR := $(DEVICE_PATH)/prebuilt/dtb
 # A dtbo de fábrica fica como está (o U-Boot aplica no DT de fábrica).
 BOARD_KERNEL_SEPARATED_DTBO := false
 
-# boot_devices: no 6.1 o nó do eMMC é mmc@fe310000 (no 4.19 era fe310000.sdhci).
+# boot_devices: na base Android (hy300-ack-6.1) o nó do eMMC é sdhci@fe310000, o mesmo nome
+# do 4.19 de fábrica (no BSP Linux hy300-6.1 era mmc@fe310000).
 # A cmdline vem inteira do boot.img (o U-Boot só acrescenta mode, serialno,
 # verifiedbootstate, dtb_idx e earlycon). SELinux permissive até a política existir.
 BOARD_KERNEL_CMDLINE := console=ttyFIQ0 firmware_class.path=/vendor/etc/firmware init=/init
 BOARD_KERNEL_CMDLINE += rootwait ro loop.max_part=7 printk.devkmsg=on
 BOARD_KERNEL_CMDLINE += androidboot.console=ttyFIQ0 androidboot.hardware=rk3566
-BOARD_KERNEL_CMDLINE += androidboot.boot_devices=fe310000.mmc
+BOARD_KERNEL_CMDLINE += androidboot.boot_devices=fe310000.sdhci
 BOARD_KERNEL_CMDLINE += androidboot.selinux=permissive
 
 # Partições físicas (GPT de fábrica; o eMMC não é reparticionado).

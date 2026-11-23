@@ -30,6 +30,7 @@ PRODUCT_COPY_FILES += \
 # init e ueventd
 PRODUCT_COPY_FILES += \
     $(DEVICE_PATH)/configs/init/hy300-clear-bcb.sh:$(TARGET_COPY_OUT_VENDOR)/bin/hy300-clear-bcb.sh \
+    $(DEVICE_PATH)/configs/init/hy300-diag.sh:$(TARGET_COPY_OUT_VENDOR)/bin/hy300-diag.sh \
     $(DEVICE_PATH)/configs/init/init.rk3566.rc:$(TARGET_COPY_OUT_VENDOR)/etc/init/hw/init.rk3566.rc \
     $(DEVICE_PATH)/configs/init/ueventd.rk3566.rc:$(TARGET_COPY_OUT_VENDOR)/etc/ueventd.rc
 
@@ -116,6 +117,16 @@ PRODUCT_PACKAGES += \
     com.android.hardware.gatekeeper.nonsecure \
     android.hardware.health-service.example \
     android.hardware.health-service.example_recovery
+
+# Wi-Fi AIC8800, por enquanto só o teste do driver no hy300-diag (sem HAL nem wpa_supplicant):
+# módulos em prebuilt/modules (BOARD_VENDOR_KERNEL_MODULES), as funções do initramfs de teste
+# (hy300-wifi.sh, do repositório do projeto) e o iw. O firmware da AICSemi é binário de fábrica:
+# entra só no build local, de prebuilt/firmware/aic8800 (fora do git, extraído do vendor.img de
+# fábrica pelo kernel/build-lineage-kernel.sh).
+PRODUCT_PACKAGES += hy300-wifi.sh
+PRODUCT_PACKAGES_DEBUG += iw
+PRODUCT_COPY_FILES += \
+    $(foreach f,$(wildcard $(DEVICE_PATH)/prebuilt/firmware/aic8800/*),$(f):$(TARGET_COPY_OUT_VENDOR)/etc/firmware/aic8800/$(notdir $(f)))
 
 # Rede cabeada por adaptador USB (o Wi-Fi AIC8800 ainda não funciona no kernel Android).
 PRODUCT_COPY_FILES += \

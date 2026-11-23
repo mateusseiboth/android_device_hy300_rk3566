@@ -77,6 +77,9 @@ BOARD_KERNEL_CMDLINE += androidboot.selinux=permissive
 # init vira panic do kernel. O init_fatal_reboot_target não é usado (o init lê o valor com bug de
 # sizeof); com panic o reboot é normal e o U-Boot sobe a boot (o Alpine).
 BOARD_KERNEL_CMDLINE += panic=5 androidboot.init_fatal_panic=true
+# Imagem de teste do primeiro boot: liga o hy300-diag (logs no /metadata e reinício normal aos
+# 8 min, de volta ao Alpine). Tirar quando o Lineage tiver rede.
+BOARD_KERNEL_CMDLINE += androidboot.hy300.diag=1
 
 # Partições físicas (GPT de fábrica; o eMMC não é reparticionado).
 BOARD_FLASH_BLOCK_SIZE := 131072

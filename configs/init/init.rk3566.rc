@@ -79,3 +79,16 @@ service watchdogd /system/bin/watchdogd 10 20
     group root
     oom_score_adjust -1000
     seclabel u:r:watchdogd:s0
+
+# Diagnóstico do primeiro boot sem rede (configs/init/hy300-diag.sh): só no userdebug, e o script
+# ainda exige androidboot.hy300.diag=1 na cmdline ou /metadata/hy300-diag/ativo. Começa no
+# post-fs (o /metadata já está montado pelo primeiro estágio) e reinicia normal aos 8 min.
+service hy300-diag /vendor/bin/sh /vendor/bin/hy300-diag.sh
+    user root
+    group root log readproc
+    seclabel u:r:su:s0
+    disabled
+    oneshot
+
+on post-fs && property:ro.debuggable=1
+    start hy300-diag

@@ -50,6 +50,9 @@ cc_binary {
         "android.hardware.common-V2-ndk",
         "android.hardware.common.fmq-V1-ndk",
         "android.hardware.tv.input-V1-ndk",
+        // AudioDeviceDescription::CONNECTION_HDMI é definido na biblioteca dos tipos que a
+        // tv.input V1 importa (android.media.audio.common.types-V1).
+        "android.media.audio.common.types-V1-ndk",
         "libbase",
         "libbinder_ndk",
         "libcutils",

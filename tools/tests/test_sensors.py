@@ -39,6 +39,16 @@ class SensorsHalFilesTest(unittest.TestCase):
         self.assertEqual(hal.findtext("name"), "android.hardware.sensors")
         self.assertEqual(hal.findtext("fqname"), "ISensors/default")
 
+    def test_fmq_headers_do_not_break_wconversion(self):
+        # O libfmq não compila com -Wconversion -Werror (build da rodada 8): os includes dele ficam
+        # entre pragmas, e o código do HAL continua com a flag.
+        with open(os.path.join(SENSORS, "hal", "Sensors.h")) as header:
+            text = header.read()
+        push = text.index("#pragma clang diagnostic push")
+        self.assertLess(push, text.index("#include <fmq/AidlMessageQueue.h>"))
+        self.assertLess(text.index("#include <fmq/EventFlag.h>"),
+                        text.index("#pragma clang diagnostic pop"))
+
 
 if __name__ == "__main__":
     unittest.main()

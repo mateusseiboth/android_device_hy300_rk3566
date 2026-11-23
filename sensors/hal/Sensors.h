@@ -8,8 +8,15 @@
 #include <aidl/android/hardware/common/fmq/SynchronizedReadWrite.h>
 #include <aidl/android/hardware/sensors/BnSensors.h>
 #include <android-base/thread_annotations.h>
+// O libfmq não compila limpo com -Wconversion (sinal e 64->32 nos templates do cabeçalho); o
+// código deste HAL continua com -Wconversion -Werror.
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wconversion"
+#pragma clang diagnostic ignored "-Wsign-conversion"
+#pragma clang diagnostic ignored "-Wshorten-64-to-32"
 #include <fmq/AidlMessageQueue.h>
 #include <fmq/EventFlag.h>
+#pragma clang diagnostic pop
 
 #include <map>
 #include <memory>

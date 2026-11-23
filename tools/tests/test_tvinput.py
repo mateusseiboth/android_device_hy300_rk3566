@@ -60,6 +60,12 @@ class TvInputHalFilesTest(unittest.TestCase):
         with open(os.path.join(TVINPUT, "hal", "android.hardware.tv.input-service.hy300.rc")) as rc:
             self.assertIn("interface aidl android.hardware.tv.input.ITvInput/default", rc.read())
 
+    def test_links_the_audio_types_that_tv_input_v1_imports(self):
+        # Sem ela o link falha: AudioDeviceDescription::CONNECTION_HDMI fica indefinido (build da
+        # rodada 8).
+        with open(os.path.join(TVINPUT, "Android.bp")) as bp:
+            self.assertIn('"android.media.audio.common.types-V1-ndk"', bp.read())
+
 
 if __name__ == "__main__":
     unittest.main()

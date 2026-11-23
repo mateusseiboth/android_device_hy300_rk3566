@@ -73,6 +73,10 @@ BOARD_KERNEL_CMDLINE += rootwait ro loop.max_part=7 printk.devkmsg=on
 BOARD_KERNEL_CMDLINE += androidboot.console=ttyFIQ0 androidboot.hardware=rk3566
 BOARD_KERNEL_CMDLINE += androidboot.boot_devices=fe310000.sdhci
 BOARD_KERNEL_CMDLINE += androidboot.selinux=permissive
+# Nunca parar: panic reinicia em 5 s (também é o CONFIG_PANIC_TIMEOUT do kernel) e erro fatal do
+# init vira panic do kernel. O init_fatal_reboot_target não é usado (o init lê o valor com bug de
+# sizeof); com panic o reboot é normal e o U-Boot sobe a boot (o Alpine).
+BOARD_KERNEL_CMDLINE += panic=5 androidboot.init_fatal_panic=true
 
 # Partições físicas (GPT de fábrica; o eMMC não é reparticionado).
 BOARD_FLASH_BLOCK_SIZE := 131072

@@ -52,3 +52,30 @@ on boot
 
 on property:sys.boot_completed=1
     swapon_all /vendor/etc/fstab.rk3566
+
+# Alpine na partição boot, LineageOS na recovery: um "reboot recovery" ou o "redefinir para a
+# fábrica" gravam boot-recovery no BCB da misc, o U-Boot passa a subir sempre a recovery e o
+# Alpine fica inalcançável. O script apaga só esse comando (2048 bytes do bootloader_message), no
+# começo e no fim do boot. Mesma lógica do android/clear-bcb do hy300-alpine.
+service hy300-clear-bcb /vendor/bin/sh /vendor/bin/hy300-clear-bcb.sh
+    user root
+    group root
+    seclabel u:r:su:s0
+    disabled
+    oneshot
+
+on post-fs-data
+    start hy300-clear-bcb
+
+on property:sys.boot_completed=1
+    start hy300-clear-bcb
+
+# Watchdog (dw_wdt com pré-timeout em panic; o kernel o alimenta até alguém abrir /dev/watchdog).
+# O watchdogd do AOSP passa a alimentar a cada 10 s com timeout de 30 s: se o userspace parar e
+# ele não rodar mais, o pré-timeout dá panic e o aparelho reinicia (panic=5), como no Alpine.
+service watchdogd /system/bin/watchdogd 10 20
+    class core
+    user root
+    group root
+    oom_score_adjust -1000
+    seclabel u:r:watchdogd:s0

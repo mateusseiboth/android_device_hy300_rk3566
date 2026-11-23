@@ -29,6 +29,7 @@ PRODUCT_COPY_FILES += \
 
 # init e ueventd
 PRODUCT_COPY_FILES += \
+    $(DEVICE_PATH)/configs/init/hy300-clear-bcb.sh:$(TARGET_COPY_OUT_VENDOR)/bin/hy300-clear-bcb.sh \
     $(DEVICE_PATH)/configs/init/init.rk3566.rc:$(TARGET_COPY_OUT_VENDOR)/etc/init/hw/init.rk3566.rc \
     $(DEVICE_PATH)/configs/init/ueventd.rk3566.rc:$(TARGET_COPY_OUT_VENDOR)/etc/ueventd.rc
 
@@ -94,10 +95,12 @@ PRODUCT_COPY_FILES += \
 # priv-app com a chave de plataforma; o TvSettings mostra o item "Projetor" para ele.
 PRODUCT_PACKAGES += HY300Settings
 
-# Animação de boot com log ao vivo (vendor/hy300/hy300-rk3566/android/bootlog, versão Java portada
-# do Android 12): o serviço bootanim vira o bootlog.sh (rc com override no /product). Enquanto o
-# ART não sobe, o bootanimation nativo mostra o hy300-bootlog.zip (1 quadro, o logo).
+# Animação de boot com log ao vivo (vendor/hy300/hy300-rk3566/android/bootlog): o serviço bootanim
+# vira o bootlog.sh (rc com override no /product), que tenta a versão nativa em C++
+# (/system_ext/bin/hy300-bootlog-native, sem ART) e, se ela não desenhar, a Java com o
+# bootanimation mostrando o hy300-bootlog.zip (1 quadro, o logo) até o ART subir.
 PRODUCT_PACKAGES += \
+    hy300-bootlog-native \
     hy300-bootlog \
     hy300-bootlog.rc \
     hy300-bootlog.sh \

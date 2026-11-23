@@ -293,3 +293,8 @@ PRODUCT_VENDOR_PROPERTIES += \
     ro.vendor.hy300.bt.flow=1 \
     vendor.ser.bt-uart=/dev/ttyS1
 endif
+
+# Foco e LEDs: o app recebe o grupo vendor_hy300_hw (config.fs) pela permissão
+# io.github.hy300.permission.PROJECTOR_HARDWARE; o mapeamento permissão -> gid fica no /product.
+PRODUCT_COPY_FILES += \
+    $(DEVICE_PATH)/configs/permissions/hy300-hw-permissions.xml:$(TARGET_COPY_OUT_PRODUCT)/etc/permissions/hy300-hw-permissions.xml

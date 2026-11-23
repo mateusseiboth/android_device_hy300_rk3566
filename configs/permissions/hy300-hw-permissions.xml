@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    SPDX-FileCopyrightText: 2026 Mateus Seiboth
+    SPDX-License-Identifier: Apache-2.0
+
+    Quem tem a permissão (o app io.github.hy300.settings, que a declara com proteção
+    signature|privileged) roda com o grupo vendor_hy300_hw, dono dos nós sysfs do motor de foco
+    e dos LEDs (init.rk3566.rc). Fica no /product: o vendor não pode mapear permissão para gid.
+-->
+<permissions>
+    <permission name="io.github.hy300.permission.PROJECTOR_HARDWARE">
+        <group gid="vendor_hy300_hw" />
+    </permission>
+</permissions>

@@ -48,14 +48,20 @@ on boot
     write /sys/class/devfreq/fde60000.gpu/governor performance
     write /sys/class/devfreq/dmc/governor performance
 
-    # Motor de foco e LEDs indicadores, que o app io.github.hy300.settings (priv-app, uid de app,
-    # não system) usa. Mesmas permissões da fábrica (motor 0777, LEDs 0666 pelo hy300-settings.rc).
+    # Motor de foco (hy300_focus_motor, mesma ABI da TXCZ) e LEDs indicadores, que o app
+    # io.github.hy300.settings (priv-app, uid de app) usa. A fábrica abria para todos (motor 0777,
+    # LEDs 0666); aqui só o grupo vendor_hy300_hw (config.fs), que o app recebe pela permissão
+    # io.github.hy300.permission.PROJECTOR_HARDWARE, e a sepolicy limita ao domínio do app.
     # Ventoinha (Fan_h) e fonte de luz (Lcd_power) ficam só para root: desligar a ventoinha com a
     # luz acesa aquece o projetor.
-    chmod 0666 /sys/class/motor_cc/motor_cc/motor
-    chmod 0444 /sys/class/motor_cc/motor_cc/hd_camera_on
-    chmod 0666 /sys/class/leds/green/brightness
-    chmod 0666 /sys/class/leds/red/brightness
+    chown root vendor_hy300_hw /sys/class/motor_cc/motor_cc/motor
+    chmod 0660 /sys/class/motor_cc/motor_cc/motor
+    chown root vendor_hy300_hw /sys/class/motor_cc/motor_cc/hd_camera_on
+    chmod 0440 /sys/class/motor_cc/motor_cc/hd_camera_on
+    chown root vendor_hy300_hw /sys/class/leds/green/brightness
+    chmod 0660 /sys/class/leds/green/brightness
+    chown root vendor_hy300_hw /sys/class/leds/red/brightness
+    chmod 0660 /sys/class/leds/red/brightness
 
     # Bluetooth AIC8800 (UART1 = ttyS1; a permissão do nó está no ueventd)
     chown bluetooth bluetooth /sys/class/rfkill/rfkill0/state

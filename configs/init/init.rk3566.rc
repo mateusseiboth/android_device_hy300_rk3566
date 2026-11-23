@@ -7,9 +7,25 @@ on early-init
     write /sys/block/zram0/comp_algorithm lz4
     write /proc/sys/vm/swappiness 100
 
-    # GPU Mali-G52: o Panfrost é módulo no kernel Android (hy300-ack-6.1). Tem que estar
-    # carregado antes do allocator, do composer e do SurfaceFlinger (classe core/hal).
+# GPU: androidboot.hy300.gpu na cmdline escolhe o caminho (o Alpine troca com o hy300-kexec, sem
+# regravar). Os ro.hardware.* não estão nos build.prop justamente para serem decididos aqui.
+#  - panfrost: Mali-G52 pelo Panfrost (módulo do hy300-ack-6.1) e o Mesa. O módulo tem de estar
+#    carregado antes do allocator, do composer e do SurfaceFlinger (classe core/hal).
+#  - sw: sem panfrost.ko; GLES pelo ANGLE sobre o SwiftShader (Vulkan por software). Lento, mas um
+#    boot de teste nunca morre pela GPU.
+on early-init && property:ro.boot.hy300.gpu=panfrost
     exec u:r:vendor_modprobe:s0 -- /vendor/bin/modprobe -a -d /vendor/lib/modules drm_shmem_helper gpu-sched panfrost
+    # Sem runtime PM na GPU: no primeiro boot o Panfrost travou com a thread de IRQ da MMU girando
+    # enquanto a thread de jobs suspendia a GPU (__pm_runtime_suspend). O panfrost do 6.1 não
+    # sincroniza nem desliga as IRQs antes de desligar a GPU (o upstream corrigiu depois, em
+    # "drm/panfrost: Synchronize and disable interrupts before powering off"). GPU sempre ligada.
+    write /sys/devices/platform/fde60000.gpu/power/control on
+    setprop ro.hardware.egl mesa
+    setprop drm.gpu.vendor_name panfrost
+
+on early-init && property:ro.boot.hy300.gpu=sw
+    setprop ro.hardware.egl angle
+    setprop ro.hardware.vulkan pastel
 
 on fs
     mount_all /vendor/etc/fstab.rk3566 --early
@@ -80,7 +96,8 @@ service watchdogd /system/bin/watchdogd 10 20
     oom_score_adjust -1000
     seclabel u:r:watchdogd:s0
 
-# Diagnóstico do primeiro boot sem rede (configs/init/hy300-diag.sh): só no userdebug, e o script
+# Diagnóstico do primeiro boot sem rede (configs/init/hy300-diag.sh): só no userdebug (pelo
+# ro.build.type: o LineageOS sai do userdebug com ro.debuggable=0), e o script
 # ainda exige androidboot.hy300.diag=1 na cmdline ou /metadata/hy300-diag/ativo. Começa no
 # post-fs (o /metadata já está montado pelo primeiro estágio) e reinicia normal aos 8 min.
 service hy300-diag /vendor/bin/sh /vendor/bin/hy300-diag.sh
@@ -90,5 +107,5 @@ service hy300-diag /vendor/bin/sh /vendor/bin/hy300-diag.sh
     disabled
     oneshot
 
-on post-fs && property:ro.debuggable=1
+on post-fs && property:ro.build.type=userdebug
     start hy300-diag

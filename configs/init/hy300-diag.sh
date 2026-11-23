@@ -4,7 +4,8 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 # Diagnóstico do primeiro boot do LineageOS no HY300, sem rede e sem ninguém olhando (só
-# userdebug). Liga com androidboot.hy300.diag=1 na cmdline ou com /metadata/hy300-diag/ativo.
+# userdebug, pelo ro.build.type). Liga com androidboot.hy300.diag=1 na cmdline ou com
+# /metadata/hy300-diag/ativo.
 #
 # Grava em /metadata/hy300-diag/<n>/ (n = contador de boots; ficam as 3 últimas): dmesg, logcat e getprop a cada 20 s;
 # depois do boot_completed, o estado do sistema (SurfaceFlinger, codecs, memória, frequências,
@@ -34,8 +35,13 @@ STAY_MARK_HEX="68 79 33 30 30 2d 66 69 63 61 72 00 01 00 00 00"
 STAY_ZERO_HEX="00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00"
 DIAG_WIFI_IFACE_WAIT=20
 
+# userdebug pelo ro.build.type: o LineageOS liga PRODUCT_NOT_DEBUGGABLE_IN_USERDEBUG e o
+# userdebug sai com ro.debuggable=0.
 is_diag_enabled() {
-	[ "$(getprop ro.debuggable)" = 1 ] || return 1
+	case "$(getprop ro.build.type)" in
+	userdebug | eng) ;;
+	*) return 1 ;;
+	esac
 	[ "$(getprop ro.boot.hy300.diag)" = 1 ] && return 0
 	[ -e "$DIAG_ROOT/ativo" ]
 }

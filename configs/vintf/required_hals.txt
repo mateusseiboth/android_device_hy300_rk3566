@@ -1,0 +1,14 @@
+# HALs que o VINTF do HY300 tem de declarar: sem eles o system_server (ou o serviço citado) do
+# LineageOS 24 cai ou o aparelho não sobe. Conferido no host por tools/check_vintf_hals.py.
+# Os que o framework tolera ausentes estão em docs/lineageos.md, com o trecho do código.
+# Formato: pacote.Interface/instância motivo
+android.hardware.power.IPower/default HintManagerService.Injector.createIPower() e getSupportInfo() sem conferir nulo: o system_server morre (primeiro boot)
+android.hardware.audio.core.IModule/default audioserver sem módulo primário; AudioService espera o HAL de áudio
+android.hardware.audio.core.IConfig/default configuração do AudioPolicyManager vinda do HAL AIDL
+android.hardware.audio.effect.IFactory/default audioserver (efeitos) espera o IFactory
+android.hardware.health.IHealth/default BatteryService/health
+android.hardware.security.keymint.IKeyMintDevice/default keystore2 e o FBE do /data
+android.hardware.graphics.allocator.IAllocator/default SurfaceFlinger (buffers)
+android.hardware.graphics.composer3.IComposer/default SurfaceFlinger (tela)
+android.hardware.gatekeeper.IGatekeeper/default LockSettingsService/keystore2
+android.hardware.media.c2.IComponentStore/default codecs de vídeo por hardware (c2.rk.*)

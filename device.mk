@@ -56,8 +56,9 @@ PRODUCT_VENDOR_PROPERTIES += \
 
 # Gráficos abertos: Mesa Panfrost (aospext, ver BoardConfig.mk) + drm_hwcomposer (HWC3) +
 # minigbm. O minigbm "generic" usa o driver dumb no nó do rockchip (o ACK libera
-# CREATE_DUMB no render node) e o Panfrost importa por dma-buf. O EGL do Mesa escolhe o nó do
-# Panfrost por drm.gpu.vendor_name.
+# CREATE_DUMB no render node) e o Panfrost importa por dma-buf. Qual GLES usar (Mesa/Panfrost ou
+# ANGLE + SwiftShader por software) é decidido no init.rk3566.rc pela androidboot.hy300.gpu:
+# ro.hardware.egl, ro.hardware.vulkan e drm.gpu.vendor_name não vão nos build.prop.
 $(call soong_config_set,minigbm,platform,generic)
 PRODUCT_PACKAGES += \
     android.hardware.composer.hwc3-service.drm \
@@ -67,9 +68,8 @@ PRODUCT_PACKAGES += \
     libGLESv1_CM_mesa \
     libGLESv2_mesa \
     libgallium_dri
+PRODUCT_PACKAGES += vulkan.pastel
 PRODUCT_VENDOR_PROPERTIES += \
-    ro.hardware.egl=mesa \
-    drm.gpu.vendor_name=panfrost \
     ro.opengles.version=196609 \
     debug.renderengine.backend=skiaglthreaded \
     ro.surface_flinger.max_frame_buffer_acquired_buffers=3
@@ -109,6 +109,16 @@ PRODUCT_PACKAGES += \
     hy300-bootlog.zip
 PRODUCT_PRODUCT_PROPERTIES += \
     ro.product.bootanim.file=hy300-bootlog.zip
+
+# HALs que o system_server do LineageOS 24 não tolera sem (tabela e trechos do framework em
+# docs/lineageos.md, conferida no host por tools/check_vintf_hals.py):
+#  - Power AIDL: o HintManagerService lê getSupportInfo() sem conferir nulo e derruba o
+#    system_server (foi o que aconteceu no primeiro boot). O exemplo do AOSP responde tudo.
+#  - Áudio AIDL (core + effect, APEX de exemplo do AOSP): sem ele o audioserver fica sem módulo
+#    primário; o exemplo usa o ALSA do card 0 (I2S1).
+PRODUCT_PACKAGES += \
+    android.hardware.power-service.example \
+    com.android.hardware.audio
 
 # Segurança e sistema por software (a fábrica usa OP-TEE com TA fechada). KeyMint é preciso
 # para o FBE do /data.

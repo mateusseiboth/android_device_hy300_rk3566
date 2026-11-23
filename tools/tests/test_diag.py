@@ -33,7 +33,7 @@ class DiagTestBase(unittest.TestCase):
         self.uptime = os.path.join(self.tmp, "uptime")
         self.calls = os.path.join(self.tmp, "calls")
         os.makedirs(self.bin)
-        self.set_props(**{"ro.debuggable": "1", "ro.boot.hy300.diag": "1"})
+        self.set_props(**{"ro.build.type": "userdebug", "ro.boot.hy300.diag": "1"})
         self.set_uptime(12.5)
         self.fake("getprop", FAKE_GETPROP)
         for name in ("logcat", "dmesg", "dumpsys", "lsmod", "ps", "lshal", "iw", "ip", "insmod"):
@@ -93,21 +93,33 @@ class EnabledTest(DiagTestBase):
         self.assertEqual(self.run_lib("is_diag_enabled").returncode, 0)
 
     def test_enabled_by_file_on_metadata(self):
-        self.set_props(**{"ro.debuggable": "1"})
+        self.set_props(**{"ro.build.type": "userdebug"})
         os.makedirs(self.root)
         open(os.path.join(self.root, "ativo"), "w").close()
         self.assertEqual(self.run_lib("is_diag_enabled").returncode, 0)
 
     def test_disabled_without_prop_or_file(self):
-        self.set_props(**{"ro.debuggable": "1"})
+        self.set_props(**{"ro.build.type": "userdebug"})
         self.assertNotEqual(self.run_lib("is_diag_enabled").returncode, 0)
 
     def test_disabled_on_user_build(self):
-        self.set_props(**{"ro.debuggable": "0", "ro.boot.hy300.diag": "1"})
+        self.set_props(**{"ro.build.type": "user", "ro.boot.hy300.diag": "1"})
+        self.assertNotEqual(self.run_lib("is_diag_enabled").returncode, 0)
+
+    def test_enabled_on_userdebug_even_with_ro_debuggable_0(self):
+        # O LineageOS liga PRODUCT_NOT_DEBUGGABLE_IN_USERDEBUG: no userdebug, ro.debuggable=0.
+        self.set_props(**{"ro.build.type": "userdebug", "ro.debuggable": "0",
+                          "ro.boot.hy300.diag": "1"})
+        self.assertEqual(self.run_lib("is_diag_enabled").returncode, 0)
+
+    def test_disabled_on_user_build_with_file(self):
+        self.set_props(**{"ro.build.type": "user"})
+        os.makedirs(self.root)
+        open(os.path.join(self.root, "ativo"), "w").close()
         self.assertNotEqual(self.run_lib("is_diag_enabled").returncode, 0)
 
     def test_main_does_nothing_when_disabled(self):
-        self.set_props(**{"ro.debuggable": "1"})
+        self.set_props(**{"ro.build.type": "userdebug"})
         r = self.run_main()
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertFalse(os.path.exists(self.root))
@@ -201,7 +213,7 @@ class MainLoopTest(DiagTestBase):
         self.assertIn("saida de dmesg", self.read(self.root, "1", "dmesg.txt"))
 
     def test_collects_once_after_boot_completed(self):
-        self.set_props(**{"ro.debuggable": "1", "ro.boot.hy300.diag": "1",
+        self.set_props(**{"ro.build.type": "userdebug", "ro.boot.hy300.diag": "1",
                           "sys.boot_completed": "1"})
         self.set_uptime(500)
         self.run_main(HY300_DIAG_REBOOT_AFTER="480")

@@ -284,6 +284,44 @@ class DrmTest(unittest.TestCase):
         self.assertRegex(required, r"(?m)^android\.hardware\.drm\.IDrmFactory/clearkey ")
 
 
+class WidevineTest(unittest.TestCase):
+    """Widevine L3 é binário do Google: fica num diretório local (vendor/hy300-widevine, fora dos
+    repositórios) e a árvore pública só tem a ligação condicional e a sepolicy."""
+
+    def test_widevine_only_with_the_local_directory(self):
+        self.assertRegex(read(os.path.join(TREE, "device.mk")),
+                         r"ifneq \(\$\(wildcard vendor/hy300-widevine/widevine.mk\),\)\n"
+                         r"\$\(call inherit-product, vendor/hy300-widevine/widevine.mk\)\n"
+                         r"endif")
+
+    def test_sepolicy_has_the_widevine_domain(self):
+        te = read(os.path.join(TREE, "sepolicy", "vendor", "hal_drm_widevine.te"))
+        self.assertIn("hal_server_domain(hal_drm_widevine, hal_drm)", te)
+        self.assertIn("init_daemon_domain(hal_drm_widevine)", te)
+        self.assertRegex(te, r"allow hal_drm_widevine mediadrm_vendor_data_file:dir "
+                             r"create_dir_perms;")
+        self.assertRegex(read(os.path.join(TREE, "sepolicy", "vendor", "file.te")),
+                         r"type mediadrm_vendor_data_file, file_type, data_file_type;")
+
+    def test_sepolicy_labels_the_binary_and_the_data(self):
+        contexts = read(os.path.join(TREE, "sepolicy", "vendor", "file_contexts"))
+        self.assertRegex(contexts, r"(?m)^/vendor/bin/hw/android\\.hardware\\.drm-service"
+                                   r"\(-lazy\)\?\\.widevine\s+u:object_r:hal_drm_widevine_exec:s0$")
+        self.assertRegex(contexts, r"(?m)^/data/vendor/mediadrm\(/\.\*\)\?\s+"
+                                   r"u:object_r:mediadrm_vendor_data_file:s0$")
+
+    def test_service_name_has_the_drm_context(self):
+        self.assertRegex(read(os.path.join(TREE, "sepolicy", "vendor", "service_contexts")),
+                         r"(?m)^android\.hardware\.drm\.IDrmFactory/widevine\s+"
+                         r"u:object_r:hal_drm_service:s0$")
+
+    def test_no_apex_is_tracked(self):
+        import subprocess
+        tracked = subprocess.run(["git", "ls-files", "*.apex"], cwd=TREE,
+                                 capture_output=True, text=True).stdout.split()
+        self.assertEqual(tracked, [])
+
+
 class DebuggableTest(unittest.TestCase):
     """Rodada 12: adb root e adb remount no userdebug (o LineageOS liga
     PRODUCT_NOT_DEBUGGABLE_IN_USERDEBUG em vendor/lineage/config/common.mk e o userdebug saía com

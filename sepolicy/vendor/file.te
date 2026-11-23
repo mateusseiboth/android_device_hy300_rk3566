@@ -9,3 +9,6 @@ type sysfs_hy300_leds, sysfs_type, fs_type;
 
 # Governadores do devfreq (GPU e DDR), que o init.rk3566.rc põe em performance.
 type sysfs_hy300_devfreq, sysfs_type, fs_type;
+
+# /data/vendor/mediadrm: dados do Widevine (certificado do aparelho, licenças offline).
+type mediadrm_vendor_data_file, file_type, data_file_type;

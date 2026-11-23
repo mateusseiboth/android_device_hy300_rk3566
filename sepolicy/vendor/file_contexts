@@ -27,6 +27,7 @@
 /vendor/bin/hw/android\.hardware\.media\.c2@1\.1-service                u:object_r:mediacodec_exec:s0
 /vendor/bin/hw/android\.hardware\.sensors-service\.hy300               u:object_r:hal_sensors_default_exec:s0
 /vendor/bin/hw/android\.hardware\.tv\.input-service\.hy300             u:object_r:hal_tv_input_default_exec:s0
+/vendor/bin/hw/android\.hardware\.drm-service(-lazy)?\.widevine     u:object_r:hal_drm_widevine_exec:s0
 
 # Serviços do aparelho
 /vendor/bin/hy300-bt-uart       u:object_r:hy300_bt_uart_exec:s0
@@ -55,3 +56,6 @@
 # Módulos do kernel no /vendor (BOARD_VENDOR_KERNEL_MODULES): o AOSP não rotula este diretório e
 # o insmod do hy300-wifi-modules e o modprobe da GPU precisam de module_load no tipo próprio.
 /vendor/lib/modules(/.*)?  u:object_r:vendor_kernel_modules:s0
+
+# Dados do Widevine (vendor/hy300-widevine, só no build local).
+/data/vendor/mediadrm(/.*)?     u:object_r:mediadrm_vendor_data_file:s0

@@ -331,3 +331,10 @@ endif
 # Widevine devolve false. Widevine continua fora (binário do Google).
 PRODUCT_PACKAGES += \
     android.hardware.drm-service-lazy.clearkey
+
+# DRM: Widevine L3 (binário do Google), SÓ NO BUILD LOCAL: nunca vai para repositório público.
+# O diretório vendor/hy300-widevine é montado à parte (docs/lineageos.md do hy300-rk3566, "DRM");
+# sem ele a imagem sai só com o ClearKey. A sepolicy (hal_drm_widevine) fica na árvore.
+ifneq ($(wildcard vendor/hy300-widevine/widevine.mk),)
+$(call inherit-product, vendor/hy300-widevine/widevine.mk)
+endif

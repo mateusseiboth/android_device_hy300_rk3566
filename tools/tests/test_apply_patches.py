@@ -64,6 +64,33 @@ class ApplyPatchesTest(unittest.TestCase):
         self.assertEqual(self.read_hello(), "ola hy300\n")
         self.assertEqual(results[0][2], "já aplicado")
 
+    def add_stacked_patch(self):
+        # 0002 mexe na mesma linha que o 0001: com os dois aplicados, o 0001 sozinho não
+        # desfaz (foi o que aconteceu com codec2/0005 sobre o 0002 e frameworks/native/0002).
+        with open(os.path.join(self.patches, "hardware", "rockchip", "codec2",
+                               "0002-hello-de-novo.patch"), "w") as handle:
+            handle.write(PATCH.replace("-ola\n+ola hy300", "-ola hy300\n+ola hy300 de novo"))
+
+    def test_stacked_patches_apply_in_order(self):
+        self.add_stacked_patch()
+        results = apply_patches.apply_all(self.top, self.patches)
+        self.assertEqual(self.read_hello(), "ola hy300 de novo\n")
+        self.assertEqual([r[2] for r in results], ["aplicado", "aplicado"])
+
+    def test_stacked_patches_are_idempotent(self):
+        self.add_stacked_patch()
+        apply_patches.apply_all(self.top, self.patches)
+        results = apply_patches.apply_all(self.top, self.patches)
+        self.assertEqual(self.read_hello(), "ola hy300 de novo\n")
+        self.assertEqual([r[2] for r in results], ["já aplicado", "já aplicado"])
+
+    def test_stacked_patch_applies_over_an_applied_first_one(self):
+        apply_patches.apply_all(self.top, self.patches)
+        self.add_stacked_patch()
+        results = apply_patches.apply_all(self.top, self.patches)
+        self.assertEqual(self.read_hello(), "ola hy300 de novo\n")
+        self.assertEqual([r[2] for r in results], ["já aplicado", "aplicado"])
+
     def test_apply_all_fails_when_patch_does_not_fit(self):
         with open(os.path.join(self.project, "hello.txt"), "w") as handle:
             handle.write("outra coisa\n")

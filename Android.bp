@@ -3,8 +3,10 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 
-// device.mk põe este diretório em PRODUCT_SOONG_NAMESPACES.
+// device.mk põe este diretório em PRODUCT_SOONG_NAMESPACES. Importa a librga (do fonte, no
+// namespace dela) para o vendor.hy300.hdmiin-service.
 soong_namespace {
+    imports: ["hardware/rockchip/librga"],
 }
 
 // Pacotes herdados que não servem no HY300 (ver device.mk): instalar este módulo impede a

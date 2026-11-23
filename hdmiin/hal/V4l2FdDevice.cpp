@@ -19,7 +19,8 @@ V4l2FdDevice::V4l2FdDevice(const std::string& path)
 int V4l2FdDevice::xioctl(unsigned long request, void* arg) {
     int result;
     do {
-        result = ioctl(fd_.get(), request, arg);
+        // bionic: int ioctl(int, int, ...). Os VIDIOC_* cabem em 32 bits.
+        result = ioctl(fd_.get(), static_cast<int>(request), arg);
     } while (result != 0 && errno == EINTR);
     return result;
 }

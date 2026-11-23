@@ -96,5 +96,14 @@ cc_binary {
     static_libs: [
         "libhy300hdmiin_core",
         "libhy300tvinput_probe",
+        // O probe usa o núcleo do TV input; estática não leva as dependências estáticas junto.
+        "libhy300tvinput_core",
+    ],
+    // vndk/window.h inclui nativebase/nativebase.h, que inclui system/graphics-base.h e
+    // cutils/native_handle.h.
+    header_libs: [
+        "libcutils_headers",
+        "libnativebase_headers",
+        "libsystem_headers",
     ],
 }

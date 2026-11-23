@@ -231,5 +231,16 @@ class KernelModulesTest(unittest.TestCase):
         self.assertEqual(names.index("aic8800_btlpm.ko"), names.index("aic8800_bsp.ko") + 1)
 
 
+class NamespaceTest(unittest.TestCase):
+    def test_device_namespace_sees_librga(self):
+        # O vendor.hy300.hdmiin-service copia pela RGA; a librga fica no namespace
+        # hardware/rockchip/librga, que o namespace da árvore precisa importar (build da rodada 9:
+        # "missing dependencies: librga").
+        bp = read(os.path.join(TREE, "Android.bp"))
+        namespace = bp[bp.index("soong_namespace {"):]
+        namespace = namespace[:namespace.index("}")]
+        self.assertIn('"hardware/rockchip/librga"', namespace)
+
+
 if __name__ == "__main__":
     unittest.main()

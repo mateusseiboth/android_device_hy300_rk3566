@@ -93,6 +93,19 @@ TEST(BtRfkillTest, powersOnOnlyTheBluetoothSwitch) {
     EXPECT_EQ(sys.readFile("rfkill0/state"), "0");
 }
 
+TEST(BtRfkillTest, powersOnTheBoardAndTheChipSwitches) {
+    TempDir sys;
+    sys.writeFile("rfkill0/type", "bluetooth\n");
+    sys.writeFile("rfkill0/name", "bt_default\n");
+    sys.writeFile("rfkill0/state", "0\n");
+    sys.writeFile("rfkill2/type", "bluetooth\n");
+    sys.writeFile("rfkill2/name", "bluetooth\n");
+    sys.writeFile("rfkill2/state", "0\n");
+    EXPECT_TRUE(powerOnBluetoothRfkill(sys.path()));
+    EXPECT_EQ(sys.readFile("rfkill0/state"), "1");
+    EXPECT_EQ(sys.readFile("rfkill2/state"), "1");
+}
+
 TEST(BtRfkillTest, withoutSwitchReportsFalse) {
     TempDir sys;
     sys.writeFile("rfkill0/type", "wlan\n");

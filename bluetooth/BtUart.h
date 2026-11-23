@@ -36,7 +36,8 @@ BtUartConfig buildBtUartConfig(const PropertyGetter& get);
 
 std::optional<speed_t> toSpeed(int baud);
 
-// Liga o rfkill de tipo "bluetooth" (o aic8800_bsp registra um). false se não houver.
+// Liga todo rfkill de tipo "bluetooth": o "bt_default" do rfkill-rk (alimentação) e o
+// "bluetooth" do aic8800_btlpm (carregado depois do aic8800_bsp). false se não houver nenhum.
 bool powerOnBluetoothRfkill(const std::filesystem::path& root = "/sys/class/rfkill");
 
 // 8N1 cru, na velocidade configurada, com ou sem RTS/CTS.

@@ -73,15 +73,17 @@ BtUartConfig buildBtUartConfig(const PropertyGetter& get) {
 }
 
 bool powerOnBluetoothRfkill(const fs::path& root) {
+    bool poweredOn = false;
     std::error_code error;
     for (const auto& entry : fs::directory_iterator(root, error)) {
-        if (readLine(entry.path() / "type") == "bluetooth") {
-            std::ofstream state(entry.path() / "state");
-            state << "1";
-            return static_cast<bool>(state);
+        if (readLine(entry.path() / "type") != "bluetooth") {
+            continue;
         }
+        std::ofstream state(entry.path() / "state");
+        state << "1";
+        poweredOn = static_cast<bool>(state) || poweredOn;
     }
-    return false;
+    return poweredOn;
 }
 
 bool configureTty(int fd, const BtUartConfig& config) {

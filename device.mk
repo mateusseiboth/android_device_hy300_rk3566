@@ -270,10 +270,13 @@ PRODUCT_VENDOR_PROPERTIES += \
     ro.vendor.hy300.accel.axes=x,y,z
 
 # Bluetooth do AIC8800 (UART1 a 1,5 Mbaud), sem blobs: HAL AIDL padrão do AOSP e o
-# hy300-bt-uart (bluetooth/) para ligar o rfkill e ajustar a UART antes dele. Desligado até o
-# kernel entregar o Bluetooth (rfkill do aic8800_bsp e o patch do BT carregado pelo SDIO; no
-# modo "hci", também CONFIG_BT_HCIUART_H4): com o HAL sem controlador, a pilha do Android fica
-# reiniciando. Para ligar: HY300_WITH_BLUETOOTH=true no ambiente do build.
+# hy300-bt-uart (bluetooth/) para ligar os rfkill e ajustar a UART antes dele. O kernel
+# hy300-ack-6.1 cae418b6c490 entrega ttyS1 a 1,5 Mbaud com RTS/CTS, o patch do BT pelo
+# aic8800_bsp e os rfkill "bt_default" (rfkill-rk) e "bluetooth" (aic8800_btlpm.ko, que precisa
+# ser carregado depois do aic8800_bsp pelo hy300-wifi-modules). Desligado até a primeira
+# validação no aparelho: com o HAL sem controlador, a pilha do Android fica reiniciando. Para
+# ligar: HY300_WITH_BLUETOOTH=true no ambiente do build. A libbt-vendor da AICSemi não entra:
+# é para o HAL HIDL antigo, e o HAL AIDL fala H4 sozinho.
 # Modo "uart": o HAL fala H4 direto no tty (vendor.ser.bt-uart). Modo "hci": o kernel cria o
 # hci0 pela disciplina de linha e o HAL usa o canal de usuário do hci0.
 ifeq ($(HY300_WITH_BLUETOOTH),true)

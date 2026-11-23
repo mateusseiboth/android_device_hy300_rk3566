@@ -1,0 +1,26 @@
+# Captura da entrada HDMI (hdmiin/): lê o /dev/video do rkisp e o subdev do RK628, copia pela RGA
+# para a Surface do app de TV input. É um HAL próprio: o app (sistema) é cliente, e o serviço
+# chama de volta o BufferQueue da Surface, que mora no processo do app.
+hal_attribute(hy300_hdmiin)
+
+type hy300_hdmiin, domain;
+type hy300_hdmiin_exec, exec_type, vendor_file_type, file_type;
+init_daemon_domain(hy300_hdmiin)
+hal_server_domain(hy300_hdmiin, hal_hy300_hdmiin)
+
+type hy300_hdmiin_service, hal_service_type, service_manager_type;
+hal_attribute_service(hal_hy300_hdmiin, hy300_hdmiin_service)
+binder_call(hal_hy300_hdmiin_server, hal_hy300_hdmiin_client)
+binder_call(hal_hy300_hdmiin_client, hal_hy300_hdmiin_server)
+
+allow hy300_hdmiin video_device:chr_file rw_file_perms;
+r_dir_file(hy300_hdmiin, sysfs)
+get_prop(hy300_hdmiin, vendor_hy300_hw_prop)
+
+# Buffers da Surface (minigbm): o mapper importa pelo nó do DRM.
+allow hy300_hdmiin gpu_device:dir search;
+allow hy300_hdmiin gpu_device:chr_file rw_file_perms;
+hal_client_domain(hy300_hdmiin, hal_graphics_allocator)
+
+# App de TV input da entrada HDMI (domínio do system_ext).
+hal_client_domain(hy300_hdmi_app, hal_hy300_hdmiin)

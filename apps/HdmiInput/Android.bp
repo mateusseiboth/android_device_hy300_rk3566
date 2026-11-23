@@ -1,0 +1,39 @@
+//
+// SPDX-FileCopyrightText: 2026 Mateus Seiboth
+// SPDX-License-Identifier: Apache-2.0
+//
+// Entrada HDMI no framework de TV input (TvInputService de hardware + tela com TvView). Usa APIs
+// de sistema (TvInputInfo.Builder, ServiceManager, patch de áudio): só no build do LineageOS,
+// assinado com a chave de plataforma. A lógica sem Android é testada com JUnit
+// (tools/tests/test_hdmi_app.py, ou o java_test_host).
+
+android_app {
+    name: "HY300HdmiInput",
+    srcs: ["src/**/*.java"],
+    resource_dirs: ["res"],
+    manifest: "AndroidManifest.xml",
+    platform_apis: true,
+    certificate: "platform",
+    privileged: true,
+    system_ext_specific: true,
+    static_libs: ["vendor.hy300.hdmiin-V1-java"],
+    required: ["privapp-permissions-hy300-hdmi.xml"],
+}
+
+prebuilt_etc {
+    name: "privapp-permissions-hy300-hdmi.xml",
+    src: "privapp-permissions-hy300-hdmi.xml",
+    sub_dir: "permissions",
+    system_ext_specific: true,
+}
+
+java_test_host {
+    name: "HY300HdmiInputLogicTests",
+    srcs: [
+        "src/io/github/hy300/hdmi/AudioPortChooser.java",
+        "src/io/github/hy300/hdmi/Signal.java",
+        "tests/**/*.java",
+    ],
+    static_libs: ["junit"],
+    test_suites: ["general-tests"],
+}

@@ -25,6 +25,18 @@ cc_library_static {
     export_include_dirs: ["core"],
 }
 
+// Leitura do sinal no subdev do RK628, usada pelo HAL de TV input e pela captura (hdmiin/).
+cc_library_static {
+    name: "libhy300tvinput_probe",
+    defaults: ["hy300_tvinput_defaults"],
+    vendor: true,
+    srcs: ["hal/V4l2Probe.cpp"],
+    export_include_dirs: ["hal"],
+    shared_libs: ["libbase"],
+    static_libs: ["libhy300tvinput_core"],
+    export_static_lib_headers: ["libhy300tvinput_core"],
+}
+
 cc_test {
     name: "hy300-tvinput-core-test",
     defaults: ["hy300_tvinput_defaults"],
@@ -41,7 +53,6 @@ cc_binary {
     relative_install_path: "hw",
     srcs: [
         "hal/TvInput.cpp",
-        "hal/V4l2Probe.cpp",
         "hal/main.cpp",
     ],
     init_rc: ["hal/android.hardware.tv.input-service.hy300.rc"],
@@ -60,5 +71,6 @@ cc_binary {
     static_libs: [
         "libaidlcommonsupport",
         "libhy300tvinput_core",
+        "libhy300tvinput_probe",
     ],
 }

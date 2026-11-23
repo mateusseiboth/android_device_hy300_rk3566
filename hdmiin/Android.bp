@@ -1,0 +1,100 @@
+//
+// SPDX-FileCopyrightText: 2026 Mateus Seiboth
+// SPDX-License-Identifier: Apache-2.0
+//
+// Imagem da entrada HDMI: o serviço vendor.hy300.hdmiin-service captura o /dev/video do rkisp e
+// copia pela RGA para a Surface que o app de TV input (apps/HdmiInput) entrega. A lógica da
+// captura (core/) é testada no host com um V4L2 falso (tools/tests/test_hdmiin.py, ou o cc_test).
+
+aidl_interface {
+    name: "vendor.hy300.hdmiin",
+    vendor_available: true,
+    srcs: ["aidl/vendor/hy300/hdmiin/*.aidl"],
+    local_include_dir: "aidl",
+    include_dirs: ["frameworks/native/aidl/gui"],
+    stability: "vintf",
+    owner: "hy300",
+    backend: {
+        cpp: {
+            enabled: false,
+        },
+        rust: {
+            enabled: false,
+        },
+        java: {
+            platform_apis: true,
+        },
+        ndk: {
+            additional_shared_libraries: ["libnativewindow"],
+        },
+    },
+    versions_with_info: [
+        {
+            version: "1",
+            imports: [],
+        },
+    ],
+    frozen: true,
+}
+
+cc_defaults {
+    name: "hy300_hdmiin_defaults",
+    cflags: [
+        "-Wall",
+        "-Werror",
+        "-Wextra",
+        "-Wconversion",
+    ],
+    cpp_std: "c++20",
+}
+
+cc_library_static {
+    name: "libhy300hdmiin_core",
+    defaults: ["hy300_hdmiin_defaults"],
+    vendor_available: true,
+    host_supported: true,
+    srcs: [
+        "core/CaptureStream.cpp",
+        "core/PreviewPump.cpp",
+    ],
+    export_include_dirs: ["core"],
+}
+
+cc_test {
+    name: "hy300-hdmiin-core-test",
+    defaults: ["hy300_hdmiin_defaults"],
+    host_supported: true,
+    srcs: ["tests/HdmiCaptureTest.cpp"],
+    local_include_dirs: ["tests"],
+    static_libs: ["libhy300hdmiin_core"],
+    test_suites: ["general-tests"],
+}
+
+cc_binary {
+    name: "vendor.hy300.hdmiin-service",
+    defaults: ["hy300_hdmiin_defaults"],
+    vendor: true,
+    relative_install_path: "hw",
+    srcs: [
+        "hal/HdmiCapture.cpp",
+        "hal/RgaBlitter.cpp",
+        "hal/V4l2FdDevice.cpp",
+        "hal/WindowSink.cpp",
+        "hal/main.cpp",
+    ],
+    init_rc: ["hal/vendor.hy300.hdmiin-service.rc"],
+    vintf_fragments: ["hal/vendor.hy300.hdmiin-service.xml"],
+    shared_libs: [
+        "libbase",
+        "libbinder_ndk",
+        "liblog",
+        "libnativewindow",
+        "librga",
+        "libsync",
+        "vendor.hy300.hdmiin-V1-ndk",
+    ],
+    static_libs: [
+        "libhy300hdmiin_core",
+        "libhy300tvinput_probe",
+    ],
+}

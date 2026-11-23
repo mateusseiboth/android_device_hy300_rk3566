@@ -304,3 +304,11 @@ PRODUCT_VENDOR_PROPERTIES += \
     ro.vendor.hy300.hdmiin.video=rkisp_mainpath \
     ro.vendor.hy300.hdmiin.subdev=rk628 \
     ro.vendor.hy300.hdmiin.audio_address=CARD_1_DEV_0
+
+# Imagem da entrada HDMI com keystone e BCSH: o serviço do vendor captura o /dev/video do rkisp e
+# copia pela RGA para a Surface do TvView (hdmiin/); o app HY300HdmiInput (apps/HdmiInput) é o
+# TV input de hardware do HDMI que o HAL de TV input anuncia, com a tela cheia e o patch de áudio
+# HDMI In -> alto-falante. O sideband do HAL não é usado.
+PRODUCT_PACKAGES += \
+    vendor.hy300.hdmiin-service \
+    HY300HdmiInput

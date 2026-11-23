@@ -1,0 +1,8 @@
+# App da entrada HDMI: priv-app com a chave de plataforma, domínio próprio. Serviços do sistema
+# (TV input, áudio) e o serviço de captura do vendor (regras de cliente na política do vendor).
+typeattribute hy300_hdmi_app coredomain;
+app_domain(hy300_hdmi_app)
+
+allow hy300_hdmi_app app_api_service:service_manager find;
+allow hy300_hdmi_app system_api_service:service_manager find;
+allow hy300_hdmi_app audioserver_service:service_manager find;

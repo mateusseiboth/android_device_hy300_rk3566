@@ -1,0 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Mateus Seiboth
+# SPDX-License-Identifier: Apache-2.0
+service vendor.tv-input-hy300 /vendor/bin/hw/android.hardware.tv.input-service.hy300
+    interface aidl android.hardware.tv.input.ITvInput/default
+    class hal
+    user system
+    group system camera

@@ -1,0 +1,64 @@
+//
+// SPDX-FileCopyrightText: 2026 Mateus Seiboth
+// SPDX-License-Identifier: Apache-2.0
+//
+// HAL de TV input (AIDL V1) da entrada HDMI do HY300 (RK628 -> rkisp). O núcleo (core/) não
+// depende do Android e é testado no host (tools/tests/test_tvinput.py, ou este cc_test).
+
+cc_defaults {
+    name: "hy300_tvinput_defaults",
+    cflags: [
+        "-Wall",
+        "-Werror",
+        "-Wextra",
+        "-Wconversion",
+    ],
+    cpp_std: "c++20",
+}
+
+cc_library_static {
+    name: "libhy300tvinput_core",
+    defaults: ["hy300_tvinput_defaults"],
+    vendor_available: true,
+    host_supported: true,
+    srcs: ["core/HdmiInCore.cpp"],
+    export_include_dirs: ["core"],
+}
+
+cc_test {
+    name: "hy300-tvinput-core-test",
+    defaults: ["hy300_tvinput_defaults"],
+    host_supported: true,
+    srcs: ["tests/HdmiInCoreTest.cpp"],
+    static_libs: ["libhy300tvinput_core"],
+    test_suites: ["general-tests"],
+}
+
+cc_binary {
+    name: "android.hardware.tv.input-service.hy300",
+    defaults: ["hy300_tvinput_defaults"],
+    vendor: true,
+    relative_install_path: "hw",
+    srcs: [
+        "hal/TvInput.cpp",
+        "hal/V4l2Probe.cpp",
+        "hal/main.cpp",
+    ],
+    init_rc: ["hal/android.hardware.tv.input-service.hy300.rc"],
+    vintf_fragments: ["hal/android.hardware.tv.input-service.hy300.xml"],
+    shared_libs: [
+        "android.hardware.common-V2-ndk",
+        "android.hardware.common.fmq-V1-ndk",
+        "android.hardware.tv.input-V1-ndk",
+        "libbase",
+        "libbinder_ndk",
+        "libcutils",
+        "libfmq",
+        "liblog",
+        "libutils",
+    ],
+    static_libs: [
+        "libaidlcommonsupport",
+        "libhy300tvinput_core",
+    ],
+}

@@ -298,3 +298,14 @@ endif
 # io.github.hy300.permission.PROJECTOR_HARDWARE; o mapeamento permissão -> gid fica no /product.
 PRODUCT_COPY_FILES += \
     $(DEVICE_PATH)/configs/permissions/hy300-hw-permissions.xml:$(TARGET_COPY_OUT_PRODUCT)/etc/permissions/hy300-hw-permissions.xml
+
+# Entrada HDMI (RK628 -> csi2-dphy0 -> rkisp-vir0): HAL de TV input próprio (tvinput/), que
+# acompanha cabo e resolução pelo subdev do RK628 e entrega o stream como sideband. O áudio da
+# placa "rockchiphdmiin" vai ao alto-falante pelo patch de software do audio policy (HDMI In em
+# configs/audio). A imagem depende de um consumidor do sideband no compositor, que ainda não
+# existe (ver docs/lineage-recursos.md no hy300-rk3566).
+PRODUCT_PACKAGES += android.hardware.tv.input-service.hy300
+PRODUCT_VENDOR_PROPERTIES += \
+    ro.vendor.hy300.hdmiin.video=rkisp_mainpath \
+    ro.vendor.hy300.hdmiin.subdev=rk628 \
+    ro.vendor.hy300.hdmiin.audio_address=CARD_1_DEV_0

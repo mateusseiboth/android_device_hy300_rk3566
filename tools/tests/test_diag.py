@@ -66,6 +66,7 @@ class DiagTestBase(unittest.TestCase):
             "HY300_DIAG_SYS": os.path.join(self.tmp, "sys"),
             "HY300_DIAG_PROC": os.path.join(self.tmp, "proc"),
             "HY300_DIAG_WIFI": "0",
+            "HY300_DIAG_MISC": os.path.join(self.tmp, "sem-misc"),
         }
         env.update(extra)
         return env
@@ -206,6 +207,55 @@ class MainLoopTest(DiagTestBase):
         self.run_main(HY300_DIAG_REBOOT_AFTER="480")
         self.assertEqual(self.calls_text().count("dumpsys SurfaceFlinger"), 1)
         self.assertTrue(os.path.exists(os.path.join(self.root, "1", "meminfo.txt")))
+
+
+MARK = b"hy300-ficar\0\x01\0\0\0"
+MARK_OFFSET = 0x10000
+
+
+class StayMarkTest(DiagTestBase):
+    """Antes do reboot o diag grava a marca de "ficar" do Alpine (misc 0x10000), para ele não
+    voltar sozinho ao Lineage e os logs poderem ser lidos. Mesmo formato do
+    scripts/reboot-to-alpine.sh do hy300-alpine; só grava se a área estiver zerada ou já marcada."""
+
+    def make_misc(self, area=bytes(16)):
+        misc = os.path.join(self.tmp, "misc")
+        data = bytearray(4 * 1024 * 1024)
+        data[:13] = b"boot-recovery"
+        data[MARK_OFFSET:MARK_OFFSET + 16] = area
+        with open(misc, "wb") as f:
+            f.write(data)
+        return misc, bytes(data)
+
+    def read_bytes(self, path):
+        with open(path, "rb") as f:
+            return f.read()
+
+    def test_writes_mark_on_zero_area_and_nothing_else(self):
+        misc, before = self.make_misc()
+        r = self.run_lib(f'write_stay_mark "{misc}"')
+        self.assertEqual(r.returncode, 0, r.stderr)
+        after = self.read_bytes(misc)
+        self.assertEqual(after[MARK_OFFSET:MARK_OFFSET + 16], MARK)
+        self.assertEqual(after[:MARK_OFFSET], before[:MARK_OFFSET])
+        self.assertEqual(after[MARK_OFFSET + 16:], before[MARK_OFFSET + 16:])
+
+    def test_keeps_existing_mark(self):
+        misc, before = self.make_misc(MARK)
+        self.assertEqual(self.run_lib(f'write_stay_mark "{misc}"').returncode, 0)
+        self.assertEqual(self.read_bytes(misc), before)
+
+    def test_refuses_unknown_data(self):
+        misc, before = self.make_misc(b"hy300-boots \x02\0\0\0")
+        self.assertNotEqual(self.run_lib(f'write_stay_mark "{misc}"').returncode, 0)
+        self.assertEqual(self.read_bytes(misc), before)
+
+    def test_main_marks_before_reboot(self):
+        misc, _ = self.make_misc()
+        self.set_uptime(500)
+        self.run_main(HY300_DIAG_REBOOT_AFTER="480", HY300_DIAG_MISC=misc)
+        self.assertEqual(self.read_bytes(misc)[MARK_OFFSET:MARK_OFFSET + 16], MARK)
+        self.assertIn("marca de ficar", self.read(self.root, "1", "diag.txt"))
 
 
 class WifiTest(DiagTestBase):

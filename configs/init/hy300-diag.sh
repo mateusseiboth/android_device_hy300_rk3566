@@ -9,8 +9,10 @@
 # Grava em /metadata/hy300-diag/<n>/ (n = contador de boots; ficam as 3 últimas): dmesg, logcat e getprop a cada 20 s;
 # depois do boot_completed, o estado do sistema (SurfaceFlinger, codecs, memória, frequências,
 # módulos, processos); em paralelo, o teste do Wi-Fi AIC8800 só com o driver (sem HAL). Aos 8 min
-# de uptime, com ou sem boot_completed, faz sync e um reboot NORMAL (sys.powerctl=reboot, sem
-# alvo: o init não grava BCB) e o U-Boot sobe a partição boot, onde está o Alpine.
+# de uptime, com ou sem boot_completed, grava a marca de "ficar" do Alpine na misc (0x10000, o
+# mesmo formato do scripts/reboot-to-alpine.sh do hy300-alpine: o Alpine fica no ar em vez de
+# voltar sozinho ao Lineage), faz sync e um reboot NORMAL (sys.powerctl=reboot, sem alvo: o init
+# não grava BCB) e o U-Boot sobe a partição boot, onde está o Alpine.
 #
 # Testes: tools/tests/test_diag.py (HY300_DIAG_LIB=1 só define as funções).
 
@@ -24,7 +26,12 @@ DIAG_WIFI="${HY300_DIAG_WIFI:-1}"
 DIAG_WIFI_LIB="${HY300_DIAG_WIFI_LIB:-/vendor/etc/hy300/hy300-wifi.sh}"
 DIAG_MODULE_DIR="${HY300_DIAG_MODULE_DIR:-/vendor/lib/modules}"
 DIAG_FIRMWARE_DIR="${HY300_DIAG_FIRMWARE_DIR:-/vendor/etc/firmware/aic8800}"
+DIAG_MISC="${HY300_DIAG_MISC:-/dev/block/by-name/misc}"
 DIAG_WIFI_SCAN_TIMEOUT=60
+# Marca de ficar: "hy300-ficar\0" + versão 1, 16 bytes em 0x10000 (bloco 4096 de 16 bytes).
+STAY_MARK_INDEX=4096
+STAY_MARK_HEX="68 79 33 30 30 2d 66 69 63 61 72 00 01 00 00 00"
+STAY_ZERO_HEX="00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00"
 DIAG_WIFI_IFACE_WAIT=20
 
 is_diag_enabled() {
@@ -137,6 +144,21 @@ run_wifi_test() {
 	sync
 }
 
+read_mark_area() {
+	dd if="$1" bs=16 skip="$STAY_MARK_INDEX" count=1 2>/dev/null | od -An -tx1 | tr -s ' \n' '  ' |
+		sed 's/^ *//; s/ *$//'
+}
+
+# Só grava se a área estiver zerada ou já com a marca (o contador do Alpine fica em 0x10010).
+write_stay_mark() {
+	area=$(read_mark_area "$1")
+	[ "$area" = "$STAY_MARK_HEX" ] && return 0
+	[ "$area" = "$STAY_ZERO_HEX" ] || return 1
+	printf 'hy300-ficar\000\001\000\000\000' |
+		dd of="$1" bs=16 seek="$STAY_MARK_INDEX" count=1 conv=notrunc,fsync 2>/dev/null || return 1
+	[ "$(read_mark_area "$1")" = "$STAY_MARK_HEX" ]
+}
+
 wait_interval() {
 	remaining=$(($2 - $1))
 	[ "$remaining" -gt "$DIAG_INTERVAL" ] && remaining=$DIAG_INTERVAL
@@ -162,6 +184,11 @@ main() {
 		fi
 		now=$(uptime_seconds)
 		if [ "$now" -ge "$DIAG_REBOOT_AFTER" ]; then
+			if write_stay_mark "$DIAG_MISC"; then
+				log_line "$dir" "marca de ficar gravada na misc"
+			else
+				log_line "$dir" "marca de ficar NÃO gravada (área da misc ocupada ou sem acesso)"
+			fi
 			log_line "$dir" "reinício normal (boot_completed=$collected)"
 			sync
 			setprop sys.powerctl reboot

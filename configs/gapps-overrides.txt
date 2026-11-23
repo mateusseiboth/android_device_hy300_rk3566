@@ -1,0 +1,2 @@
+# Instalado pelo módulo hy300-gapps-overrides (Android.bp), só com GApps; retira da imagem:
+SetupWraithPrebuilt

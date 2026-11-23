@@ -39,7 +39,30 @@ PRODUCT_COPY_FILES += \
 PRODUCT_COPY_FILES += \
     $(DEVICE_PATH)/keylayout/fdd70030_pwm.kl:$(TARGET_COPY_OUT_VENDOR)/usr/keylayout/fdd70030_pwm.kl
 
-# Memória (1,5 GB): zram de 75 % com lz4 (fstab + init.rk3566.rc). lmkd por PSI, com limites
+# zram pelo mmd do Android 17 (system/memory/mmd), não pelo fstab: só assim entra o writeback de
+# páginas ociosas para o eMMC, com limite diário. Medido no boot 4 (mm_stat): 78,8 MB de páginas
+# ocupando 30,5 MB com a sobra do zsmalloc, razão efetiva 2,58 com lz4. 125 % da RAM (1,81 GB)
+# cheio ocuparia ~700 MB, menos da metade da RAM; acima disso o zram disputaria com o que precisa
+# ficar descomprimido. lz4 e não zstd: o kernel não tem CONFIG_CRYPTO_ZSTD, e nos quatro A55 o
+# zstd custa várias vezes mais CPU por página para ganhar ~25 % de razão.
+# Writeback: arquivo de 512 MiB em /data/per_boot/zram, no máximo 256 MiB por dia no eMMC (~90 GB
+# por ano), só páginas ociosas há 2 a 4 horas. A manutenção não espera o aparelho ficar ocioso:
+# o projetor é desligado da tomada, não fica parado com a tela apagada.
+PRODUCT_VENDOR_PROPERTIES += \
+    mmd.zram.enabled=true \
+    mmd.zram.size=125% \
+    mmd.zram.comp_algorithm=lz4 \
+    mmd.zram.writeback.enabled=true \
+    mmd.zram.writeback.device_size=536870912 \
+    mmd.zram.writeback.min_free_space_mib=1536 \
+    mmd.zram.writeback.limit.enabled=true \
+    mmd.zram.writeback.max_bytes_per_day=268435456 \
+    mmd.zram.writeback.min_idle_seconds=7200 \
+    mmd.zram.writeback.max_idle_seconds=14400
+PRODUCT_PRODUCT_PROPERTIES += \
+    mm.zram.maintenance.require_device_idle=false
+
+# Memória (1,5 GB). lmkd por PSI, com limites
 # que poupam o app em primeiro plano (vídeo): mata cedo os de segundo plano (kill_heaviest_task,
 # thrashing_limit baixo) e só fica crítico com stall completo longo. heapsize/growthlimit vêm do
 # atv_lowram_defaults.mk.
@@ -90,7 +113,16 @@ PRODUCT_PACKAGES += \
     librga
 PRODUCT_COPY_FILES += \
     $(DEVICE_PATH)/configs/media/media_codecs.xml:$(TARGET_COPY_OUT_VENDOR)/etc/media_codecs.xml \
-    $(DEVICE_PATH)/configs/media/media_codecs_c2_rk.xml:$(TARGET_COPY_OUT_VENDOR)/etc/media_codecs_c2_rk.xml
+    $(DEVICE_PATH)/configs/media/media_codecs_c2_rk.xml:$(TARGET_COPY_OUT_VENDOR)/etc/media_codecs_c2_rk.xml \
+    $(DEVICE_PATH)/configs/seccomp/android.hardware.media.c2@1.1-extended-seccomp-policy:$(TARGET_COPY_OUT_VENDOR)/etc/seccomp_policy/android.hardware.media.c2@1.1-extended-seccomp-policy
+
+# Entrada por Surface nos encoders (gravação de tela, espelhamento, scrcpy). O HAL do Codec2 da
+# Rockchip (HIDL 1.1) não cria InputSurface e o OMX está desligado (TARGET_SUPPORTS_OMX_SERVICE),
+# então CCodec::CreateInputSurface devolvia nulo e createInputSurface() derreferia o ponteiro
+# (SIGSEGV em libsfplugin_ccodec.so). Com -1 o CCodec cria o GraphicBufferSource (AIDL) no próprio
+# processo do app, como no emulador (device/generic/goldfish).
+PRODUCT_VENDOR_PROPERTIES += \
+    debug.stagefright.c2inputsurface=-1
 
 # App de configurações do projetor (vendor/hy300/hy300-rk3566/android/hy300-settings, do fonte):
 # priv-app com a chave de plataforma; o TvSettings mostra o item "Projetor" para ele.
@@ -180,3 +212,40 @@ PRODUCT_COPY_FILES += \
 #  - Bluetooth (UART ttyS1, HAL AIDL padrão);
 #  - sensores: acelerômetro SC7A20 (keystone automático do app);
 #  - patch de keystone no SurfaceFlinger (o app já grava as props persist.sys.keystone.*).
+
+# Fuso padrão do produto (o usuário está em Mato Grosso do Sul).
+PRODUCT_PRODUCT_PROPERTIES += \
+    persist.sys.timezone=America/Campo_Grande
+
+# Assistente de configuração: o do LineageOS não cabe em 1024x600 (botões fora da tela) e a TV não
+# tem toque. O TvProvision do AOSP (device/google/atv) só marca device_provisioned e
+# user_setup_complete e se desativa. O hy300-package-overrides (Android.bp) tira da imagem o
+# LineageSetupWizard e o Updater (OTA oficial não existe para este aparelho; ele ficava residente
+# com ~15 MB).
+PRODUCT_PACKAGES += \
+    TvProvision \
+    hy300-package-overrides
+
+# Google Apps para Android TV (MindTheGapps 17.0.0 arm64 ATV, variante minimal), SÓ NO BUILD
+# LOCAL: são proprietários e nunca vão para repositório público. O checkout vem de um
+# local_manifest (vendor/gapps_tv, docs/lineageos.md do hy300-rk3566); sem o diretório, ou com
+# HY300_WITH_GAPPS=false no ambiente, a imagem sai sem GApps. A minimal não traz o TVLauncher:
+# o launcher continua o do LineageOS.
+# O SetupWraith (assistente do Google TV) também sai (hy300-gapps-overrides, Android.bp): o
+# aparelho já é marcado como configurado pelo TvProvision e a conta Google entra por
+# Configurações > Contas e login.
+HY300_WITH_GAPPS ?= true
+ifeq ($(HY300_WITH_GAPPS),true)
+ifneq ($(wildcard vendor/gapps_tv/arm64/arm64-vendor.mk),)
+GMS_VARIANT := minimal
+$(call inherit-product, vendor/gapps_tv/arm64/arm64-vendor.mk)
+PRODUCT_PACKAGES += hy300-gapps-overrides
+endif
+endif
+
+# Aurora Store (GPLv3, loja do Google Play sem conta Google obrigatória), pré-instalada como app
+# comum no /product. O APK da F-Droid fica fora do git: tools/fetch_aurora.py baixa, confere o
+# sha256 e gera prebuilt/aurora/Android.bp.
+ifneq ($(wildcard $(DEVICE_PATH)/prebuilt/aurora/AuroraStore.apk),)
+PRODUCT_PACKAGES += AuroraStore
+endif

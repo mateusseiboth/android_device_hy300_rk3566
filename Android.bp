@@ -6,3 +6,27 @@
 // device.mk põe este diretório em PRODUCT_SOONG_NAMESPACES.
 soong_namespace {
 }
+
+// Pacotes herdados que não servem no HY300 (ver device.mk): instalar este módulo impede a
+// instalação deles. LineageSetupWizard: não cabe em 1024x600, o TvProvision ocupa o lugar.
+// Updater: não há OTA para este aparelho.
+prebuilt_etc {
+    name: "hy300-package-overrides",
+    vendor: true,
+    src: "configs/package-overrides.txt",
+    sub_dir: "hy300",
+    overrides: [
+        "LineageSetupWizard",
+        "Updater",
+    ],
+}
+
+// Com os GApps (só no build local, device.mk): tira o assistente do Google TV, que não é
+// necessário (o TvProvision marca o aparelho como configurado) e não foi pensado para 1024x600.
+prebuilt_etc {
+    name: "hy300-gapps-overrides",
+    vendor: true,
+    src: "configs/gapps-overrides.txt",
+    sub_dir: "hy300",
+    overrides: ["SetupWraithPrebuilt"],
+}

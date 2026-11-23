@@ -71,7 +71,13 @@ do fonte (`/dev/mpp_service`). O gralloc é o minigbm, que não aceita o stride,
 bits de uso privados da Rockchip; por isso (patch 0002) o decoder trabalha sempre em "buffer
 mode": o MPP decodifica nos buffers dele e cada quadro é copiado pela RGA para um bloco NV12 comum.
 Custa uma cópia por quadro na RGA, irrelevante em 1080p. Sem 10 bits por enquanto (HEVC Main10,
-VP9 perfil 2 vão para software) e sem encoders.
+VP9 perfil 2 vão para software).
+
+Encoders `c2.rk.avc.encoder` e `c2.rk.hevc.encoder` (VEPU540, até 1080p60): o patch 0004 tira do
+caminho de entrada os bits de uso privados e o NV12 da Rockchip, e o seccomp do serviço ganha o
+que o encoder chama (`configs/seccomp`). Entrada por Surface (gravação de tela, espelhamento):
+`debug.stagefright.c2inputsurface=-1`, porque o HAL da Rockchip não cria InputSurface e o OMX está
+desligado; o patch `frameworks/av/0001` troca o crash por erro se a prop faltar.
 
 ## App de configurações e animação de boot
 
@@ -99,7 +105,22 @@ fábrica).
 
 - `init.rk3566.rc`: CPU no governador `performance` (vale quando o kernel tiver cpufreq), GPU
   (devfreq do Panfrost) e DDR (`dmc`) em `performance`; o térmico do kernel limita por cima.
-- lmkd por PSI com limites que poupam o app em primeiro plano (`device.mk`); zram 75 % lz4.
+- lmkd por PSI com limites que poupam o app em primeiro plano (`device.mk`).
+- zram pelo `mmd` do Android 17 (fora do fstab): 125 % da RAM, lz4, writeback de páginas ociosas
+  para um arquivo de 512 MiB no `/data`, no máximo 256 MiB por dia no eMMC. Números da medição em
+  `docs/lineageos.md` do projeto.
+- `LineageSetupWizard` (não cabe em 1024x600) e `Updater` (sem OTA) fora da imagem
+  (`hy300-package-overrides`); o `TvProvision` marca o aparelho como configurado.
+- Fuso padrão `America/Campo_Grande`.
+
+## GApps e Aurora Store (só no build local)
+
+- MindTheGapps ATV minimal: com o checkout `vendor/gapps_tv` (local_manifest local, nunca em
+  repositório público), o `device.mk` herda `vendor/gapps_tv/arm64/arm64-vendor.mk` com
+  `GMS_VARIANT := minimal`. `HY300_WITH_GAPPS=false` no ambiente desliga. O assistente do Google TV
+  sai (`hy300-gapps-overrides`); a conta entra por Configurações > Contas e login.
+- Aurora Store: `tools/fetch_aurora.py` baixa da F-Droid, confere versão e sha256 e gera
+  `prebuilt/aurora/` (fora do git); o `device.mk` só inclui se o APK existir.
 
 
 
@@ -150,34 +171,37 @@ instala aqui. `prebuilt/VERSION` guarda o commit e os sha256.
 | `Image.gz` | kernel com o DT do HY300 embutido, `gzip -9` reproduzível |
 | `dtb/rk3566-hy300.dtb` | seção dtb do header v2 (o mkbootimg exige; o U-Boot não usa) |
 | `resource.img` | seção `second` do `boot.img` de fábrica (logo + `rk-kernel.dtb` de fábrica) |
-| `modules/*.ko` | `drm_shmem_helper`, `gpu-sched`, `panfrost` |
+| `modules/*.ko` | `drm_shmem_helper`, `gpu-sched`, `panfrost`, `aic8800_bsp`, `aic8800_fdrv` |
+| `aurora/` | Aurora Store da F-Droid e o `Android.bp` gerado (`tools/fetch_aurora.py`) |
 
 ## Estado
 
-Só conta como visto no aparelho o que está nos logs dos boots 1 a 3 (detalhes em
+Só conta como visto no aparelho o que está nos logs e medições dos boots 1 a 4 (detalhes em
 `docs/lineageos.md` do projeto).
 
 **Feito e visto no aparelho**
 
 - Primeiro boot pelo Alpine, com o ciclo do diag e a volta automática ao Alpine.
 - Kernel ACK com o DT corrigido, sem tempestade de IRQ.
-- Display e bootlog nativo.
-- GPU Panfrost sem erro.
-- Driver Wi-Fi AIC8800, com scan.
+- Display (1024x600 a 60 Hz) e bootlog nativo.
+- Boot completo em menos de 3 min (boot 4).
+- GPU Panfrost (Mesa, GLES 3.1).
+- Wi-Fi AIC8800 com a pilha do Android (DHCP) e adb pela rede.
+- Áudio (HAL core e efeitos) e Codec2 com os decoders `c2.rk.*`.
+- CPUs a 1,8 GHz no governador performance.
 - Shutdown e reboot.
 
 **Feito, sem verificação no aparelho**
 
-- App de configurações como priv-app com a chave de plataforma.
-- Vídeo por hardware (Codec2 + MPP).
+- Rodada 6: encoders `c2.rk.*`, entrada por Surface, zram pelo `mmd` com writeback, diag mais
+  leve, `TvProvision` no lugar do assistente, fuso, GApps e Aurora Store.
+- Decodificação por hardware tocando vídeo de verdade (o componente sobe; falta tocar um vídeo).
 
 **Falta**
 
-- Boot completo: o HAL core de áudio trava o system_server (corrigido na rodada 5, a conferir).
-- Pilha Wi-Fi completa e adb pela rede (rodada 5, a conferir).
 - Bluetooth e sensores.
-- Widevine.
-- Vídeo 10 bits e encoders.
+- Widevine (os GApps não trazem DRM).
+- Vídeo 10 bits.
 - sepolicy própria (hoje permissive).
 - Keystone no SurfaceFlinger (mesmas props `persist.sys.keystone.*`).
 - Entrada HDMI (RK628, vídeo e áudio).

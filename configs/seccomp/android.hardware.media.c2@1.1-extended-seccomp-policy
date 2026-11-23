@@ -1,0 +1,20 @@
+# SPDX-FileCopyrightText: 2026 Mateus Seiboth
+# SPDX-License-Identifier: Apache-2.0
+#
+# Acréscimos ao seccomp do serviço do Codec2 da Rockchip (vendor.cpp lê este arquivo depois do
+# android.hardware.media.c2@1.1-seccomp_policy). Chamada fora da lista mata o processo com SIGSYS.
+#
+# Encoder: mpp_buffer_import() duplica o fd do quadro de entrada com mpp_dup() (fcntl
+# F_DUPFD_CLOEXEC) e confere o modo com fcntl(F_GETFL). O decoder em buffer mode não importa
+# buffer externo e por isso nunca chegou aqui.
+fcntl: 1
+dup3: 1
+# Temporizador e poll do MPP (osal/mpp_time.c, mpp/mpp_sys.c).
+timerfd_create: 1
+timerfd_settime: 1
+timerfd_gettime: 1
+epoll_create1: 1
+epoll_ctl: 1
+epoll_pwait: 1
+sched_getaffinity: 1
+uname: 1

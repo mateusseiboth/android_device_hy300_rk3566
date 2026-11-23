@@ -365,5 +365,41 @@ class NetworkAdbTest(DiagTestBase):
         self.assertIn("adb pela rede no ar", self.read(self.root, "1", "diag.txt"))
 
 
+    def test_stops_collecting_after_boot_when_network_adb_is_up(self):
+        # Rodada 6: com o boot completo e o adb pela rede no ar, o dmesg como root a cada 20 s
+        # deixava o processo em estado D e gastava CPU. Quem conduz é o adb: as coletas param.
+        self.set_network_adb("running", "5555", "    inet 192.0.2.10/24 scope global wlan0\\n")
+        with open(self.props, "a") as f:
+            f.write("sys.boot_completed=1\n")
+        self.set_uptime(100)
+        r = self.run_main(HY300_DIAG_REBOOT_AFTER="480", HY300_DIAG_MAX_LOOPS="5")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        calls = self.calls_text()
+        self.assertEqual(calls.count("dmesg"), 1, calls)
+        self.assertEqual(calls.count("logcat -b all"), 1, calls)
+        self.assertNotIn("setprop sys.powerctl reboot", calls)
+        self.assertIn("coletas suspensas", self.read(self.root, "1", "diag.txt"))
+
+    def test_exits_after_deadline_when_network_adb_is_up(self):
+        # Depois do prazo, com o adb no ar, o diag termina em vez de continuar em laço.
+        self.set_network_adb("running", "5555", "    inet 192.0.2.10/24 scope global wlan0\\n")
+        with open(self.props, "a") as f:
+            f.write("sys.boot_completed=1\n")
+        self.set_uptime(500)
+        r = self.run_main(HY300_DIAG_REBOOT_AFTER="480")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertNotIn("setprop sys.powerctl reboot", self.calls_text())
+        self.assertIn("diag encerrado", self.read(self.root, "1", "diag.txt"))
+
+    def test_keeps_collecting_while_network_adb_is_down(self):
+        self.set_network_adb("running", "5555", "")
+        with open(self.props, "a") as f:
+            f.write("sys.boot_completed=1\n")
+        self.set_uptime(100)
+        r = self.run_main(HY300_DIAG_REBOOT_AFTER="480", HY300_DIAG_MAX_LOOPS="3")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(self.calls_text().count("dmesg"), 3)
+
+
 if __name__ == "__main__":
     unittest.main()

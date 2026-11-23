@@ -1,0 +1,24 @@
+HY300: CCodec::createInputSurface sem superfície compatível falha em vez de derrubar o processo.
+createCompatibleInputSurface() devolve nulo quando o HAL do Codec2 não cria InputSurface, o OMX
+está desligado e debug.stagefright.c2inputsurface não é -1; o código chamava getType() no ponteiro
+nulo (SIGSEGV em libsfplugin_ccodec.so, visto com o scrcpy). O device.mk liga a prop; este patch
+só troca o crash por onInputSurfaceCreationFailed(NO_INIT) se ela faltar.
+
+diff --git a/media/codec2/sfplugin/CCodec.cpp b/media/codec2/sfplugin/CCodec.cpp
+index 292e9ab..e51f05a 100644
+--- a/media/codec2/sfplugin/CCodec.cpp
++++ b/media/codec2/sfplugin/CCodec.cpp
+@@ -2186,6 +2186,13 @@ void CCodec::createInputSurface() {
+     }
+ 
+     sp<PersistentSurface> persistentSurface = createCompatibleInputSurface();
++    if (persistentSurface == nullptr) {
++        // HAL sem InputSurface, OMX desligado e debug.stagefright.c2inputsurface != -1: não há
++        // de onde tirar a superfície. Falha a criação em vez de derreferenciar nulo.
++        ALOGE("Failed to create input surface: no compatible input surface source");
++        mCallback->onInputSurfaceCreationFailed(NO_INIT);
++        return;
++    }
+     PersistentSurface::SurfaceType surfaceType = persistentSurface->getType();
+     if (surfaceType == PersistentSurface::TYPE_AIDLSOURCE) {
+         ::ndk::SpAIBinder aidlTarget = persistentSurface->getAidlTarget();

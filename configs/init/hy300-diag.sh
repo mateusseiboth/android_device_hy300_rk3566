@@ -12,9 +12,11 @@
 # (SurfaceFlinger, codecs, memória, frequências, módulos, processos); em paralelo, o estado do
 # Wi-Fi AIC8800.
 #
+# Com o boot_completed e o adb pela rede de pé (hy300-net.sh: adbd na porta 5555 e IPv4 no
+# wlan0), as coletas param: quem conduz é o adb.
+#
 # Aos 8 min de uptime, com ou sem boot_completed:
-#  - se o adb pela rede estiver de pé (hy300-net.sh: adbd na porta 5555 e IPv4 no wlan0), não
-#    reinicia: quem conduz é o adb;
+#  - se o adb pela rede estiver de pé, não reinicia e o diag termina;
 #  - senão grava a marca de "ficar" do Alpine na misc (0x10000, o mesmo formato do
 #    scripts/reboot-to-alpine.sh do hy300-alpine: o Alpine fica no ar em vez de voltar sozinho ao
 #    Lineage), faz sync e um reboot NORMAL (sys.powerctl=reboot, sem alvo: o init não grava BCB) e
@@ -190,6 +192,14 @@ wait_interval() {
 	return 0
 }
 
+# Com o boot completo e o adb pela rede no ar, quem conduz é o adb: as coletas param (o dmesg
+# como root a cada 20 s deixava o processo em estado D e custava CPU) e o diag só confere, até o
+# prazo, se o adb continua de pé. Se cair antes do prazo, as coletas voltam e o retorno ao Alpine
+# segue valendo.
+is_quiet_mode() {
+	[ "$1" = 1 ] && is_network_adb_up
+}
+
 main() {
 	is_diag_enabled || exit 0
 	dir=$(next_boot_dir "$DIAG_ROOT") || exit 1
@@ -200,22 +210,30 @@ main() {
 	fi
 	collected=0
 	loops=0
-	adb_logged=0
+	quiet_logged=0
 	while :; do
+		loops=$((loops + 1))
+		now=$(uptime_seconds)
+		if is_quiet_mode "$collected"; then
+			[ "$quiet_logged" = 1 ] || log_line "$dir" "adb pela rede no ar: coletas suspensas"
+			quiet_logged=1
+			if [ "$now" -ge "$DIAG_REBOOT_AFTER" ]; then
+				log_line "$dir" "adb pela rede no ar aos $now s: sem reinício automático, diag encerrado"
+				exit 0
+			fi
+			[ "$loops" -ge "$DIAG_MAX_LOOPS" ] && exit 0
+			wait_interval "$now" "$DIAG_REBOOT_AFTER"
+			continue
+		fi
 		snapshot "$dir"
 		if [ "$collected" = 0 ] && [ "$(getprop sys.boot_completed)" = 1 ]; then
 			log_line "$dir" "boot_completed"
 			collect_after_boot "$dir"
 			collected=1
 		fi
-		now=$(uptime_seconds)
 		if [ "$now" -ge "$DIAG_REBOOT_AFTER" ] && is_network_adb_up; then
-			[ "$adb_logged" = 1 ] || log_line "$dir" "adb pela rede no ar: sem reinício automático"
-			adb_logged=1
-			loops=$((loops + 1))
-			[ "$loops" -ge "$DIAG_MAX_LOOPS" ] && exit 0
-			sleep "$DIAG_INTERVAL"
-			continue
+			log_line "$dir" "adb pela rede no ar aos $now s (boot_completed=$collected): sem reinício automático, diag encerrado"
+			exit 0
 		fi
 		if [ "$now" -ge "$DIAG_REBOOT_AFTER" ]; then
 			if write_stay_mark "$DIAG_MISC"; then
@@ -228,6 +246,7 @@ main() {
 			setprop sys.powerctl reboot
 			exit 0
 		fi
+		[ "$loops" -ge "$DIAG_MAX_LOOPS" ] && exit 0
 		wait_interval "$now" "$DIAG_REBOOT_AFTER"
 	done
 }

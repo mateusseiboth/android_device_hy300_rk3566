@@ -1,0 +1,3 @@
+# Instalado pelo módulo hy300-package-overrides (Android.bp), que retira da imagem:
+LineageSetupWizard
+Updater

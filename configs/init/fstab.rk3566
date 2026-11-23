@@ -4,7 +4,7 @@
 #  - sem vendor_dlkm/odm_dlkm: os módulos vão no vendor;
 #  - /data com FBE v2 (a fábrica usa "fileencryption=software", v1). O /data é
 #    formatado na troca de sistema de qualquer jeito;
-#  - zram sem zram_backingdev_size (o backing file da fábrica fica no /data);
+#  - sem zram: quem monta o zram e o writeback para o eMMC é o mmd (device.mk);
 #  - sem as linhas de SATA e de NAND, que a placa não tem;
 #  - /cust (partição da TXCZ) não é montada; a partição fica intocada.
 #
@@ -28,5 +28,3 @@ odm                            /odm         ext4   ro,barrier=1                 
 # USB-A (dwc3 em modo host, fcc00000) e o slot do cartão da fábrica
 /devices/platform/*usb*                            auto  vfat  defaults  voldmanaged=usb:auto
 /devices/platform/fe2b0000.mmc/mmc_host*           auto  auto  defaults  voldmanaged=sdcard1:auto
-
-/dev/block/zram0               none         swap   defaults                                                    zramsize=75%,max_comp_streams=4

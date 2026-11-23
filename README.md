@@ -130,6 +130,11 @@ O app ganha o gid pela permissão de assinatura `FOCUS_MOTOR` que ele declara
 
 ## GApps e Aurora Store (só no build local)
 
+- Widevine L3 (binário do Google, só no build local): com `vendor/hy300-widevine/` no checkout
+  (montado à parte, ver `docs/lineageos.md` do projeto, "DRM"), o `device.mk` herda o
+  `widevine.mk` de lá (variante `classico`, HAL AIDL sob demanda). A sepolicy `hal_drm_widevine`
+  fica na árvore. O ClearKey do AOSP está sempre na imagem.
+
 - MindTheGapps ATV minimal: com o checkout `vendor/gapps_tv` (local_manifest local, nunca em
   repositório público), o `device.mk` herda `vendor/gapps_tv/arm64/arm64-vendor.mk` com
   `GMS_VARIANT := minimal`. `HY300_WITH_GAPPS=false` no ambiente desliga. O assistente do Google TV

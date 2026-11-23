@@ -1,0 +1,9 @@
+# SPDX-FileCopyrightText: 2026 Mateus Seiboth
+# SPDX-License-Identifier: Apache-2.0
+#
+# Keystone (patches/frameworks/native/0001): o SurfaceFlinger sobe antes das props persist e só
+# relê os cantos quando persist.sys.keystone.update vira 1. Como o init.rk356x.rc da fábrica,
+# o gatilho é dado no boot, assim que os cantos salvos estão carregados. Fica no /system_ext
+# porque persist.sys.* é do sistema (o vendor_init não pode gravar).
+on property:ro.persistent_properties.ready=true
+    setprop persist.sys.keystone.update 1

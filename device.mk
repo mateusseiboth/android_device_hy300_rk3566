@@ -250,3 +250,9 @@ endif
 ifneq ($(wildcard $(DEVICE_PATH)/prebuilt/aurora/AuroraStore.apk),)
 PRODUCT_PACKAGES += AuroraStore
 endif
+
+# Keystone no SurfaceFlinger (patches/frameworks/native/0001): mesma API de props da fábrica
+# (persist.sys.keystone.*), aplicada pelo RenderEngine na composição pelo cliente. O .rc dá o
+# gatilho de releitura quando as props persist carregam.
+PRODUCT_COPY_FILES += \
+    $(DEVICE_PATH)/configs/init/hy300-keystone.rc:$(TARGET_COPY_OUT_SYSTEM_EXT)/etc/init/hy300-keystone.rc

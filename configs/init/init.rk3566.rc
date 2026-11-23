@@ -61,9 +61,8 @@ on boot
     chown bluetooth bluetooth /sys/class/rfkill/rfkill0/state
     chmod 0660 /sys/class/rfkill/rfkill0/state
 
-    # Keystone: o compositor relê os cantos persist.sys.keystone.* no boot, como o
-    # init.rk356x.rc de fábrica fazia.
-    setprop persist.sys.keystone.update 1
+    # Keystone: o gatilho de releitura dos cantos fica no hy300-keystone.rc (system_ext), porque
+    # persist.sys.* é do sistema e o vendor_init não pode gravar com SELinux enforcing.
 
 # Alpine na partição boot, LineageOS na recovery: um "reboot recovery" ou o "redefinir para a
 # fábrica" gravam boot-recovery no BCB da misc, o U-Boot passa a subir sempre a recovery e o

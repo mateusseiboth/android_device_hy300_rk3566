@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    SPDX-FileCopyrightText: 2026 Mateus Seiboth
+    SPDX-License-Identifier: Apache-2.0
+
+    Quem tem a permissão FOCUS_MOTOR (declarada pelo app io.github.hy300.settings com nível de
+    assinatura) roda com o gid vendor_hy300_motor, o grupo do nó do motor de foco
+    (init.rk3566.rc: system:vendor_hy300_motor 0660). Fica no /product: só /system e /product
+    podem associar permissão a gid.
+-->
+<permissions>
+    <permission name="io.github.hy300.settings.permission.FOCUS_MOTOR">
+        <group gid="vendor_hy300_motor" />
+    </permission>
+</permissions>

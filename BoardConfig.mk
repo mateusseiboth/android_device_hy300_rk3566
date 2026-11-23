@@ -147,9 +147,19 @@ WIFI_DRIVER_SOCKET_IFACE := wlan0
 WIFI_HIDL_UNIFIED_SUPPLICANT_SERVICE_RC_ENTRY := true
 
 # Módulos do kernel no /vendor/lib/modules (prebuilt/modules, gerados junto com a Image pelo
-# kernel/build-lineage-kernel.sh do projeto). Hoje: Panfrost e dependências (a GPU é módulo no
-# hy300-ack-6.1). O init.rk3566.rc carrega antes do composer.
+# kernel/build-lineage-kernel.sh do projeto): Panfrost e dependências (a GPU é módulo no
+# hy300-ack-6.1), Wi-Fi AIC8800 e o rfkill do Bluetooth (aic8800_btlpm, depende do aic8800_bsp).
+# Quem carrega: o init.rk3566.rc (GPU, antes do composer) e o hy300-wifi-modules.sh (AIC8800); o
+# modules.load só registra a ordem.
 BOARD_VENDOR_KERNEL_MODULES := $(sort $(wildcard $(DEVICE_PATH)/prebuilt/modules/*.ko))
+BOARD_VENDOR_KERNEL_MODULES_LOAD := drm_shmem_helper.ko gpu-sched.ko panfrost.ko aic8800_bsp.ko aic8800_btlpm.ko aic8800_fdrv.ko
+
+# AIDs de vendor (config.fs): o gid do motor de foco, que o app de configurações ganha pela
+# permissão FOCUS_MOTOR (configs/permissions/hy300-focus-motor.xml).
+TARGET_FS_CONFIG_GEN += $(DEVICE_PATH)/config.fs
+
+# sepolicy do aparelho (o boot ainda é permissive; a política completa vem depois).
+BOARD_VENDOR_SEPOLICY_DIRS += $(DEVICE_PATH)/sepolicy/vendor
 
 # Gráficos: Mesa com Panfrost (Mali-G52), compilado com meson pelo aospext do GloDroid
 # (vendor/glodroid/aospext, local_manifest) a partir do external/mesa3d do próprio AOSP 17

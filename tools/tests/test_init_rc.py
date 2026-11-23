@@ -138,6 +138,18 @@ class InitRcTest(unittest.TestCase):
         # variant); a variant só troca chave que já existe na cmdline.
         self.assertEqual(read_cmdline_props().get("ro.boot.hy300.perfil"), "teste")
 
+    def test_focus_motor_is_narrow_for_the_settings_app(self):
+        # A fábrica fazia chmod 0777. Aqui: dono system, grupo vendor_hy300_motor (gid que o app
+        # ganha pela permissão FOCUS_MOTOR), 0660; o fim de curso só leitura.
+        boot = [a for a in self.actions if split_trigger(a["trigger"])[0] == "boot"]
+        lines = [line for a in boot for line in a["lines"]]
+        motor = "/sys/class/motor_cc/motor_cc/motor"
+        self.assertIn(f"chown system vendor_hy300_motor {motor}", lines)
+        self.assertIn(f"chmod 0660 {motor}", lines)
+        self.assertIn("chmod 0444 /sys/class/motor_cc/motor_cc/hd_camera_on", lines)
+        for mode in ("0666", "0777", "0664"):
+            self.assertNotIn(f"chmod {mode} {motor}", lines)
+
     def test_wifi_modules_load_in_background_on_boot(self):
         actions = self.actions_starting("hy300-wifi-modules")
         self.assertEqual([split_trigger(a["trigger"])[0] for a in actions], ["boot"])

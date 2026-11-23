@@ -88,6 +88,13 @@ mostra o item "Projetor" porque o app trata `com.android.tv.settings.SOUND`) e `
 zip de 1 quadro com o logo). O `init.rk3566.rc` dá ao app o motor de foco e os LEDs (0666, como a
 fábrica).
 
+Motor de foco (`hy300_focus_motor`, embutido no kernel desde o `cae418b6c490`): o nó
+`/sys/class/motor_cc/motor_cc/motor` é `system:vendor_hy300_motor` 0660 (a fábrica usava 0777).
+O app ganha o gid pela permissão de assinatura `FOCUS_MOTOR` que ele declara
+(`configs/permissions/hy300-focus-motor.xml` no `/product`, AID em `config.fs`), e a sepolicy
+(`sepolicy/vendor`) dá ao nó o tipo `sysfs_hy300_motor`, legível e gravável só pelo
+`platform_app`.
+
 ## Wi-Fi, áudio e adb pela rede
 
 - **Wi-Fi**: módulos do AIC8800 carregados no `boot` (`configs/init/hy300-wifi-modules.sh`),
@@ -179,7 +186,7 @@ instala aqui. `prebuilt/VERSION` guarda o commit e os sha256.
 | `Image.gz` | kernel com o DT do HY300 embutido, `gzip -9` reproduzível |
 | `dtb/rk3566-hy300.dtb` | seção dtb do header v2 (o mkbootimg exige; o U-Boot não usa) |
 | `resource.img` | seção `second` do `boot.img` de fábrica (logo + `rk-kernel.dtb` de fábrica) |
-| `modules/*.ko` | `drm_shmem_helper`, `gpu-sched`, `panfrost`, `aic8800_bsp`, `aic8800_fdrv` |
+| `modules/*.ko` | `drm_shmem_helper`, `gpu-sched`, `panfrost`, `aic8800_bsp`, `aic8800_btlpm` (rfkill do Bluetooth), `aic8800_fdrv`; ordem no `BOARD_VENDOR_KERNEL_MODULES_LOAD` |
 | `aurora/` | Aurora Store da F-Droid e o `Android.bp` gerado (`tools/fetch_aurora.py`) |
 
 ## Estado

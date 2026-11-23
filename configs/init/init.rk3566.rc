@@ -48,12 +48,16 @@ on boot
     write /sys/class/devfreq/fde60000.gpu/governor performance
     write /sys/class/devfreq/dmc/governor performance
 
-    # Motor de foco e LEDs indicadores, que o app io.github.hy300.settings (priv-app, uid de app,
-    # não system) usa. Mesmas permissões da fábrica (motor 0777, LEDs 0666 pelo hy300-settings.rc).
-    # Ventoinha (Fan_h) e fonte de luz (Lcd_power) ficam só para root: desligar a ventoinha com a
-    # luz acesa aquece o projetor.
-    chmod 0666 /sys/class/motor_cc/motor_cc/motor
+    # Motor de foco (hy300_focus_motor, embutido no kernel): só o app io.github.hy300.settings
+    # (priv-app, uid de app) escreve. Ele ganha o gid vendor_hy300_motor pela permissão de
+    # assinatura FOCUS_MOTOR (configs/permissions/hy300-focus-motor.xml); a sepolicy dá o tipo
+    # sysfs_hy300_motor ao nó. A fábrica fazia chmod 0777. O fim de curso é só leitura.
+    chown system vendor_hy300_motor /sys/class/motor_cc/motor_cc/motor
+    chmod 0660 /sys/class/motor_cc/motor_cc/motor
     chmod 0444 /sys/class/motor_cc/motor_cc/hd_camera_on
+    # LEDs indicadores: mesmas permissões da fábrica (0666 pelo hy300-settings.rc). Ventoinha
+    # (Fan_h) e fonte de luz (Lcd_power) ficam só para root: desligar a ventoinha com a luz acesa
+    # aquece o projetor.
     chmod 0666 /sys/class/leds/green/brightness
     chmod 0666 /sys/class/leds/red/brightness
 

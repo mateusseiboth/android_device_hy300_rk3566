@@ -1,0 +1,4 @@
+# O app de configurações (io.github.hy300.settings, priv-app com a chave de plataforma, domínio
+# platform_app) anda com o motor de foco e lê o fim de curso. A permissão de arquivo (0660, grupo
+# vendor_hy300_motor) restringe ao app dentro do domínio.
+allow platform_app sysfs_hy300_motor:file rw_file_perms;

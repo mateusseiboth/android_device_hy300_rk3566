@@ -1,0 +1,2 @@
+# Motor de foco (hy300_focus_motor): /sys/class/motor_cc/motor_cc/{motor,hd_camera_on}.
+type sysfs_hy300_motor, sysfs_type, fs_type;

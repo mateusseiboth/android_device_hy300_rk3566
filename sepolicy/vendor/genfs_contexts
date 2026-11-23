@@ -1,0 +1,3 @@
+# Motor de foco: nó focus-motor do DT (txcz,hy300-focus-motor), classe motor_cc.
+genfscon sysfs /devices/platform/focus-motor/motor_cc/motor_cc/motor u:object_r:sysfs_hy300_motor:s0
+genfscon sysfs /devices/platform/focus-motor/motor_cc/motor_cc/hd_camera_on u:object_r:sysfs_hy300_motor:s0

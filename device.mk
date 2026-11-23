@@ -32,6 +32,7 @@ PRODUCT_COPY_FILES += \
     $(DEVICE_PATH)/configs/init/hy300-clear-bcb.sh:$(TARGET_COPY_OUT_VENDOR)/bin/hy300-clear-bcb.sh \
     $(DEVICE_PATH)/configs/init/hy300-diag.sh:$(TARGET_COPY_OUT_VENDOR)/bin/hy300-diag.sh \
     $(DEVICE_PATH)/configs/init/hy300-alpine.sh:$(TARGET_COPY_OUT_VENDOR)/bin/hy300-alpine.sh \
+    $(DEVICE_PATH)/configs/permissions/hy300-focus-motor.xml:$(TARGET_COPY_OUT_PRODUCT)/etc/permissions/hy300-focus-motor.xml \
     $(DEVICE_PATH)/configs/init/init.rk3566.rc:$(TARGET_COPY_OUT_VENDOR)/etc/init/hw/init.rk3566.rc \
     $(DEVICE_PATH)/configs/init/ueventd.rk3566.rc:$(TARGET_COPY_OUT_VENDOR)/etc/ueventd.rc
 

@@ -180,5 +180,55 @@ class ZramTest(unittest.TestCase):
         self.assertEqual(self.props.get("mm.zram.maintenance.require_device_idle"), "false")
 
 
+class FocusMotorAccessTest(unittest.TestCase):
+    """Motor de foco (hy300_focus_motor): só o app de configurações escreve, por um gid de vendor
+    que ele ganha pela permissão de assinatura FOCUS_MOTOR, e um tipo sysfs próprio na sepolicy."""
+
+    def test_vendor_aid(self):
+        text = read(os.path.join(TREE, "config.fs"))
+        self.assertRegex(text, r"\[AID_VENDOR_HY300_MOTOR\]\nvalue: *29\d\d")
+        board = read(os.path.join(TREE, "BoardConfig.mk"))
+        self.assertIn("TARGET_FS_CONFIG_GEN += $(DEVICE_PATH)/config.fs", board)
+
+    def test_permission_maps_to_the_gid(self):
+        path = os.path.join(TREE, "configs", "permissions", "hy300-focus-motor.xml")
+        root = ET.parse(path).getroot()
+        perm = root.find("permission")
+        self.assertEqual(perm.get("name"), "io.github.hy300.settings.permission.FOCUS_MOTOR")
+        self.assertEqual(perm.find("group").get("gid"), "vendor_hy300_motor")
+        # Só /system e /product podem mapear permissão para gid (SystemConfig, ALLOW_PERMISSIONS).
+        self.assertIn("configs/permissions/hy300-focus-motor.xml:$(TARGET_COPY_OUT_PRODUCT)/etc/"
+                      "permissions/hy300-focus-motor.xml", read(os.path.join(TREE, "device.mk")))
+
+    def test_sepolicy_labels_the_node(self):
+        sep = os.path.join(TREE, "sepolicy", "vendor")
+        self.assertRegex(read(os.path.join(sep, "file.te")),
+                         r"type sysfs_hy300_motor, sysfs_type, fs_type;")
+        genfs = read(os.path.join(sep, "genfs_contexts"))
+        for attr in ("motor", "hd_camera_on"):
+            self.assertIn(f"genfscon sysfs /devices/platform/focus-motor/motor_cc/motor_cc/{attr} "
+                          "u:object_r:sysfs_hy300_motor:s0", genfs)
+        self.assertRegex(read(os.path.join(sep, "platform_app.te")),
+                         r"allow platform_app sysfs_hy300_motor:file rw_file_perms;")
+        self.assertIn("BOARD_VENDOR_SEPOLICY_DIRS += $(DEVICE_PATH)/sepolicy/vendor",
+                      read(os.path.join(TREE, "BoardConfig.mk")))
+
+
+class KernelModulesTest(unittest.TestCase):
+    def test_modules_load_order(self):
+        board = read(os.path.join(TREE, "BoardConfig.mk")).replace("\\\n", " ")
+        line = next(l for l in board.splitlines() if l.startswith("BOARD_VENDOR_KERNEL_MODULES_LOAD"))
+        names = line.split("=", 1)[1].split()
+        self.assertEqual(names, ["drm_shmem_helper.ko", "gpu-sched.ko", "panfrost.ko",
+                                 "aic8800_bsp.ko", "aic8800_btlpm.ko", "aic8800_fdrv.ko"])
+
+    @unittest.skipUnless(os.path.exists(os.path.join(OUT, "vendor", "lib", "modules")),
+                         "sem imagem montada")
+    def test_built_modules_load_names_the_files(self):
+        with open(os.path.join(OUT, "vendor", "lib", "modules", "modules.load")) as f:
+            names = f.read().split()
+        self.assertEqual(names.index("aic8800_btlpm.ko"), names.index("aic8800_bsp.ko") + 1)
+
+
 if __name__ == "__main__":
     unittest.main()

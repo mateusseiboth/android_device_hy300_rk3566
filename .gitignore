@@ -1,2 +1,4 @@
 __pycache__/
 *.pyc
+# APKs de terceiros baixados por tools/fetch_aurora.py (fora do prebuilt/ do kernel).
+/prebuilt-apps/

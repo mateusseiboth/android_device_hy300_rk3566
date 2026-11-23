@@ -6,8 +6,9 @@
 """Busca a Aurora Store (GPLv3, https://gitlab.com/AuroraOSS/AuroraStore) para pré-instalar.
 
 O APK é o da F-Droid, versão e sha256 fixos aqui e conferidos contra o index-v2 do repositório e
-contra o arquivo. Ele fica em prebuilt/aurora/ (fora do git), com um Android.bp gerado; o
-device.mk só inclui o AuroraStore se o APK existir.
+contra o arquivo. Ele fica em prebuilt-apps/aurora/ (fora do git), com um Android.bp gerado; o
+device.mk só inclui o AuroraStore se o APK existir. Fora do prebuilt/ de propósito: o kernel é
+copiado para lá com rsync --delete.
 
 Uso: tools/fetch_aurora.py                 baixa da F-Droid
      tools/fetch_aurora.py --from APK      usa uma cópia local (o hash é conferido igual)
@@ -26,9 +27,9 @@ VERSION_CODE = 76  # 4.8.4
 APK_SHA256 = "fd9c75d90d0f4a7c132b9b4a5a2cf1992a45e03b8d8ff988b7dcfbc0db2c4d11"
 REPO = "https://f-droid.org/repo"
 INDEX_URL = REPO + "/index-v2.json"
-DEST = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "prebuilt", "aurora")
+DEST = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "prebuilt-apps", "aurora")
 APK_NAME = "AuroraStore.apk"
-ANDROID_BP = """// Gerado por tools/fetch_aurora.py. Não editar; prebuilt/ fica fora do git.
+ANDROID_BP = """// Gerado por tools/fetch_aurora.py. Não editar; prebuilt-apps/ fica fora do git.
 // Aurora Store {version} (GPLv3, fonte em https://gitlab.com/AuroraOSS/AuroraStore),
 // APK da F-Droid, sha256 {sha256}.
 android_app_import {{

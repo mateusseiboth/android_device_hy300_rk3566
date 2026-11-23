@@ -1,0 +1,33 @@
+HY300: HAL de Bluetooth AIDL padrão abre o tty direto quando vendor.ser.bt-uart está definido.
+O initialize() tentava primeiro o hci do kernel (NetBluetoothMgmt::openHci), e o waitHciDev()
+repete o Read Index List sem prazo enquanto não houver hci0. Com o AIC8800 falando H4 pela UART
+não existe hci0: o initialize() não voltava e a pilha do Android ficava em BLE_TURNING_ON (boot 7).
+
+diff --git a/bluetooth/aidl/default/BluetoothHci.cpp b/bluetooth/aidl/default/BluetoothHci.cpp
+index f644380..e97b8d3 100644
+--- a/bluetooth/aidl/default/BluetoothHci.cpp
++++ b/bluetooth/aidl/default/BluetoothHci.cpp
+@@ -159,8 +159,21 @@ void BluetoothHci::initialize(const std::shared_ptr<hal::IBluetoothHciCallbacks>
+     }
+ 
+     mCb = cb;
+-    management_.reset(new NetBluetoothMgmt);
+-    mFd = management_->openHci();
++    // HY300: com a UART configurada (vendor.ser.bt-uart), abre o tty direto. O openHci() espera
++    // um hci do kernel (waitHciDev repete o Read Index List sem prazo) e no modo UART ele nunca
++    // aparece: o initialize() não voltava e a pilha ficava em BLE_TURNING_ON.
++    if (GetSystemProperty("vendor.ser.bt-uart").has_value()) {
++        ALOGI("vendor.ser.bt-uart set: opening %s without the Linux HCI interface", mDevPath.c_str());
++        mFd = getFdFromDevPath();
++        if (mFd < 0) {
++            mState = HalState::READY;
++            cb->initializationComplete(Status::UNABLE_TO_OPEN_INTERFACE);
++            return;
++        }
++    } else {
++        management_.reset(new NetBluetoothMgmt);
++        mFd = management_->openHci();
++    }
+     if (mFd < 0) {
+         management_.reset();
+ 

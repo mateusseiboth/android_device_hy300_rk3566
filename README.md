@@ -135,7 +135,7 @@ O app ganha o gid pela permissão de assinatura `FOCUS_MOTOR` que ele declara
   `GMS_VARIANT := minimal`. `HY300_WITH_GAPPS=false` no ambiente desliga. O assistente do Google TV
   sai (`hy300-gapps-overrides`); a conta entra por Configurações > Contas e login.
 - Aurora Store: `tools/fetch_aurora.py` baixa da F-Droid, confere versão e sha256 e gera
-  `prebuilt/aurora/` (fora do git); o `device.mk` só inclui se o APK existir.
+  `prebuilt-apps/aurora/` (fora do git e fora do `prebuilt/` do kernel); o `device.mk` só inclui se o APK existir.
 
 
 
@@ -187,7 +187,6 @@ instala aqui. `prebuilt/VERSION` guarda o commit e os sha256.
 | `dtb/rk3566-hy300.dtb` | seção dtb do header v2 (o mkbootimg exige; o U-Boot não usa) |
 | `resource.img` | seção `second` do `boot.img` de fábrica (logo + `rk-kernel.dtb` de fábrica) |
 | `modules/*.ko` | `drm_shmem_helper`, `gpu-sched`, `panfrost`, `aic8800_bsp`, `aic8800_btlpm` (rfkill do Bluetooth), `aic8800_fdrv`; ordem no `BOARD_VENDOR_KERNEL_MODULES_LOAD` |
-| `aurora/` | Aurora Store da F-Droid e o `Android.bp` gerado (`tools/fetch_aurora.py`) |
 
 ## Estado
 

@@ -50,5 +50,26 @@ class BluetoothFilesTest(unittest.TestCase):
                         text.index("ifeq ($(HY300_WITH_BLUETOOTH),true)"))
 
 
+class BluetoothBoot7Test(unittest.TestCase):
+    """Boot 7 (rodada 10): Bluetooth parado em BLE_TURNING_ON, sem hci0 no kernel."""
+
+    def test_hal_goes_straight_to_the_uart(self):
+        # O initialize() do HAL padrão tenta primeiro o hci do kernel (NetBluetoothMgmt::openHci),
+        # e o waitHciDev() repete o "Read Index List" para sempre enquanto não houver hci0. No modo
+        # "uart" não há hci0: com vendor.ser.bt-uart definido, o HAL abre o tty direto.
+        with open(os.path.join(TREE, "patches", "hardware", "interfaces",
+                               "0003-bluetooth-uart-sem-esperar-o-hci.patch")) as patch:
+            text = patch.read()
+        self.assertIn('+    if (GetSystemProperty("vendor.ser.bt-uart").has_value()) {', text)
+        self.assertIn("+        mFd = getFdFromDevPath();", text)
+
+    def test_uart_setup_runs_again_after_the_aic8800_modules(self):
+        # O aic8800_btlpm (rfkill "bluetooth") carrega com o Wi-Fi, depois da primeira passada do
+        # hy300-bt-uart; sem a segunda, esse rfkill ficava bloqueado.
+        with open(os.path.join(BT, "hy300-bt-uart.rc")) as rc:
+            text = rc.read()
+        self.assertIn("on property:vendor.hy300.wifi.iface=*\n    start vendor.hy300-bt-uart", text)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -247,8 +247,9 @@ endif
 
 # Aurora Store (GPLv3, loja do Google Play sem conta Google obrigatória), pré-instalada como app
 # comum no /product. O APK da F-Droid fica fora do git: tools/fetch_aurora.py baixa, confere o
-# sha256 e gera prebuilt/aurora/Android.bp.
-ifneq ($(wildcard $(DEVICE_PATH)/prebuilt/aurora/AuroraStore.apk),)
+# sha256 e gera prebuilt-apps/aurora/Android.bp (fora do prebuilt/ do kernel, que é trocado com
+# rsync --delete).
+ifneq ($(wildcard $(DEVICE_PATH)/prebuilt-apps/aurora/AuroraStore.apk),)
 PRODUCT_PACKAGES += AuroraStore
 endif
 
@@ -314,3 +315,11 @@ PRODUCT_VENDOR_PROPERTIES += \
 PRODUCT_PACKAGES += \
     vendor.hy300.hdmiin-service \
     HY300HdmiInput
+
+# Builds de teste guardam mais log: com ro.config.low_ram o logd fica com buffers mínimos e, no
+# boot 7, o log do HAL de Bluetooth sumiu antes de alguém ler. ~1 MB por buffer.
+# No /product: ro.logd.* é prop do sistema (logd_prop), o vendor não pode gravar.
+ifneq ($(TARGET_BUILD_VARIANT),user)
+PRODUCT_PRODUCT_PROPERTIES += \
+    ro.logd.size=1M
+endif

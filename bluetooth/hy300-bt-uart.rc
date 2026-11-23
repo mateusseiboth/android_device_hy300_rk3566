@@ -10,3 +10,8 @@ service vendor.hy300-bt-uart /vendor/bin/hy300-bt-uart
     user root
     group bluetooth
     oneshot
+
+# Segunda passada depois dos módulos do AIC8800 (hy300-wifi-modules grava a prop no fim): o
+# aic8800_btlpm cria o rfkill "bluetooth" só nessa hora, depois da primeira passada (boot 7).
+on property:vendor.hy300.wifi.iface=*
+    start vendor.hy300-bt-uart

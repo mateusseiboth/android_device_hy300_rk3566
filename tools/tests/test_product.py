@@ -15,11 +15,13 @@ Rodar, na raiz da árvore: python3 -I -m unittest discover -s tools/tests
 import os
 import re
 import unittest
+import sys
 import xml.etree.ElementTree as ET
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 TREE = os.path.normpath(os.path.join(HERE, "..", ".."))
 TOP = os.path.normpath(os.path.join(TREE, "..", "..", ".."))
+sys.path.insert(0, os.path.join(TREE, "tools"))
 OUT = os.environ.get("HY300_OUT", os.path.join(TOP, "out", "target", "product", "hy300"))
 CODECS = os.path.join(TREE, "configs", "media", "media_codecs_c2_rk.xml")
 STORE = os.path.join(TOP, "hardware", "rockchip", "codec2", "store", "C2RKPlatformSupport.h")
@@ -138,7 +140,7 @@ class ProprietaryTest(unittest.TestCase):
 
     def test_aurora_only_when_the_apk_was_fetched(self):
         self.assertRegex(read(os.path.join(TREE, "device.mk")),
-                         r"ifneq \(\$\(wildcard \$\(DEVICE_PATH\)/prebuilt/aurora/AuroraStore.apk\),\)\n"
+                         r"ifneq \(\$\(wildcard \$\(DEVICE_PATH\)/prebuilt-apps/aurora/AuroraStore.apk\),\)\n"
                          r"PRODUCT_PACKAGES \+= AuroraStore")
 
     def test_no_apk_or_zip_is_tracked(self):
@@ -240,6 +242,31 @@ class NamespaceTest(unittest.TestCase):
         namespace = bp[bp.index("soong_namespace {"):]
         namespace = namespace[:namespace.index("}")]
         self.assertIn('"hardware/rockchip/librga"', namespace)
+
+
+class Boot7Test(unittest.TestCase):
+    def test_vendor_modules_have_the_kernel_modules_label(self):
+        # Boot 7: insmod do aic8800_bsp/btlpm negado (module_load) porque /vendor/lib/modules
+        # ficava como vendor_file; o AOSP não rotula esse diretório.
+        contexts = read(os.path.join(TREE, "sepolicy", "vendor", "file_contexts"))
+        self.assertIn("/vendor/lib/modules(/.*)?  u:object_r:vendor_kernel_modules:s0", contexts)
+
+    def test_test_builds_keep_more_log(self):
+        # Low RAM deixa o logd com buffers mínimos: no boot 7 o log do HAL de Bluetooth sumiu antes
+        # de alguém ler. Só fora do build "user".
+        mk = read(os.path.join(TREE, "device.mk"))
+        block = mk[mk.index("ifneq ($(TARGET_BUILD_VARIANT),user)"):]
+        self.assertIn("ro.logd.size=1M", block[:block.index("endif")])
+
+
+class AuroraLocationTest(unittest.TestCase):
+    def test_aurora_lives_outside_the_kernel_prebuilt(self):
+        # O worker do kernel copia o prebuilt com rsync --delete: o prebuilt/aurora sumiu na troca
+        # para o cae418b6c490 e a Aurora saiu da imagem sem ninguém notar (rodadas 7 a 10).
+        import fetch_aurora
+        self.assertEqual(os.path.basename(os.path.dirname(fetch_aurora.DEST)), "prebuilt-apps")
+        tracked = read(os.path.join(TREE, ".gitignore"))
+        self.assertIn("/prebuilt-apps/", tracked)
 
 
 if __name__ == "__main__":

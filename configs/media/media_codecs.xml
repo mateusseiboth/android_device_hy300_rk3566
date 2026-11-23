@@ -8,4 +8,14 @@
 -->
 <MediaCodecs>
     <Include href="media_codecs_c2_rk.xml" />
+    <!--
+        AV1 de software desligado: o RK3566 não tem AV1 em hardware e os A55 não decodificam AV1
+        em tempo real. O YouTube escolhia o c2.android.av1-dav1d.decoder (media.swcodec a 194 % de
+        CPU) e o vídeo travava; sem ele, o app cai no c2.rk.vp9.decoder. O Codec2InfoBuilder lê
+        primeiro o XML do APEX de software e depois este, então o update vale.
+    -->
+    <Decoders>
+        <MediaCodec name="c2.android.av1-dav1d.decoder" update="true" enabled="false" />
+        <MediaCodec name="c2.android.av1.decoder" update="true" enabled="false" />
+    </Decoders>
 </MediaCodecs>

@@ -1,0 +1,75 @@
+HY300: buffer mode do decoder com a vstride do destino tirada do layout real do bloco.
+Rodada 14: VP9 1920x1080 (hor 2496, ver 1080) e 854x480 saíam roxos com faixas verdes. O destino
+usava dstVStride = C2_ALIGN(height, 2), mas o minigbm aloca o NV12 com a altura alinhada e o plano
+UV começa em stride * 1088: a RGA e a cópia pela CPU escreviam o UV 8 linhas antes. Com o gralloc
+genérico a vstride vem do deslocamento do plano U sobre o Y, dividido pelo rowInc
+(c2_rk_generic::vstrideFromUvOffset, testada no host). A largura (dstStride) já era o rowInc do
+layout, que para 854 é o 864 do minigbm.
+
+diff --git a/component/osal/include/C2RKGenericGralloc.h b/component/osal/include/C2RKGenericGralloc.h
+index 253451d..8af04af 100644
+--- a/component/osal/include/C2RKGenericGralloc.h
++++ b/component/osal/include/C2RKGenericGralloc.h
+@@ -33,4 +33,16 @@ constexpr uint32_t selectOutputPixelFormat(bool genericGralloc, uint32_t request
+     return genericGralloc && requested == kHalYcbcrP010 ? kHalYcbcr420888 : requested;
+ }
+ 
++// Altura do plano Y do bloco de destino no buffer mode, tirada do layout real: o plano UV do NV12
++// começa logo depois dela. O minigbm alinha a altura na alocação (o NV12 de 1080 linhas tem o UV
++// em stride * 1088); com C2_ALIGN(height, 2) a RGA e a cópia pela CPU escreviam o UV linhas antes
++// (imagem roxa, faixas verdes). Sem layout coerente, fica a altura alinhada a 2.
++constexpr int32_t vstrideFromUvOffset(int64_t uvOffsetBytes, int32_t rowInc, int32_t fallback) {
++    if (rowInc <= 0 || uvOffsetBytes <= 0 || uvOffsetBytes % rowInc != 0) {
++        return fallback;
++    }
++    const int64_t rows = uvOffsetBytes / rowInc;
++    return rows >= fallback ? static_cast<int32_t>(rows) : fallback;
++}
++
+ }  // namespace android::c2_rk_generic
+diff --git a/component/osal/tests/C2RKGenericGrallocTest.cpp b/component/osal/tests/C2RKGenericGrallocTest.cpp
+index e381e75..b233d07 100644
+--- a/component/osal/tests/C2RKGenericGrallocTest.cpp
++++ b/component/osal/tests/C2RKGenericGrallocTest.cpp
+@@ -40,5 +40,23 @@ TEST(GenericGrallocFormatTest, p010RequestFallsBackToEightBitNv12) {
+     EXPECT_EQ(selectOutputPixelFormat(false, kHalYcbcrP010), kHalYcbcrP010);
+ }
+ 
++// Rodada 14: VP9 1920x1080 em buffer mode saía roxo com faixas verdes. O minigbm alinha a altura
++// do NV12 e o UV começa em stride * 1088; a cópia usava 1080.
++TEST(BufferModeVStrideTest, uvAfterTheAlignedHeight) {
++    EXPECT_EQ(vstrideFromUvOffset(int64_t{1920} * 1088, 1920, 1080), 1088);
++}
++
++// 854x480: o minigbm alinha a largura (rowInc 864) e o UV vem depois de 480 linhas.
++TEST(BufferModeVStrideTest, narrowWidthUsesTheRealRowInc) {
++    EXPECT_EQ(vstrideFromUvOffset(int64_t{864} * 480, 864, 480), 480);
++}
++
++TEST(BufferModeVStrideTest, incoherentLayoutKeepsTheFallback) {
++    EXPECT_EQ(vstrideFromUvOffset(0, 1920, 1080), 1080);           // UV no mesmo lugar do Y
++    EXPECT_EQ(vstrideFromUvOffset(1920 * 1088 + 7, 1920, 1080), 1080);  // fora da grade
++    EXPECT_EQ(vstrideFromUvOffset(int64_t{1920} * 1088, 0, 1080), 1080);
++    EXPECT_EQ(vstrideFromUvOffset(int64_t{1920} * 540, 1920, 1080), 1080);  // menor que a imagem
++}
++
+ }  // namespace
+ }  // namespace android::c2_rk_generic
+diff --git a/component/video/C2RKMpiDec.cpp b/component/video/C2RKMpiDec.cpp
+index 66fb48c..3b67845 100644
+--- a/component/video/C2RKMpiDec.cpp
++++ b/component/video/C2RKMpiDec.cpp
+@@ -2906,6 +2906,13 @@ c2_status_t C2RKMpiDec::getoutframe(WorkEntry *entry) {
+ 
+         int32_t dstStride = dstView.layout().planes[C2PlanarLayout::PLANE_Y].rowInc;
+         int32_t dstVStride = C2_ALIGN(height, 2);
++        if (kGenericGralloc) {
++            // HY300: o minigbm alinha a altura do NV12; o UV começa onde o layout do bloco diz.
++            dstVStride = c2_rk_generic::vstrideFromUvOffset(
++                    dstView.data()[C2PlanarLayout::PLANE_U] -
++                            dstView.data()[C2PlanarLayout::PLANE_Y],
++                    dstStride, dstVStride);
++        }
+ 
+         if (mUseRgaBlit) {
+             RgaInfo srcInfo, dstInfo;

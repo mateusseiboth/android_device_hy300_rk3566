@@ -36,8 +36,26 @@ class HdmiAudioRouteTest(unittest.TestCase):
         self.module = ET.parse(POLICY).getroot()
 
     def hdmi_port(self):
-        return next(p for p in self.module.iter("devicePort")
-                    if p.get("type") == "AUDIO_DEVICE_IN_HDMI")
+        return next(p for p in self.module.iter("devicePort") if p.get("tagName") == "HDMI In")
+
+    def test_hdmi_in_is_a_built_in_capture_device(self):
+        # Boot 6: AUDIO_DEVICE_IN_HDMI tem conexão "hdmi" e o HAL de áudio de exemplo aborta se um
+        # dispositivo com conexão estiver em <attachedDevices>. O RK628 é soldado na placa: o HDMI
+        # In entra como AUDIO_DEVICE_IN_TV_TUNER (embutido, conexão vazia), sempre presente.
+        self.assertEqual(self.hdmi_port().get("type"), "AUDIO_DEVICE_IN_TV_TUNER")
+
+    def test_tv_input_hal_announces_the_same_device_type(self):
+        with open(os.path.join(TREE, "tvinput", "hal", "TvInput.cpp")) as source:
+            text = source.read()
+        self.assertIn("AudioDeviceType::IN_TV_TUNER", text)
+        self.assertNotIn("CONNECTION_HDMI", text)
+
+    def test_hdmi_app_patches_from_the_same_device_type(self):
+        with open(os.path.join(TREE, "apps", "HdmiInput", "src", "io", "github", "hy300", "hdmi",
+                               "AudioRoute.java")) as source:
+            text = source.read()
+        self.assertIn("AudioSystem.DEVICE_IN_TV_TUNER", text)
+        self.assertNotIn("DEVICE_IN_HDMI", text)
 
     def test_hdmi_in_address_matches_the_hal_property(self):
         with open(os.path.join(TREE, "device.mk")) as mk:

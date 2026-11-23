@@ -10,6 +10,12 @@
     a ponte por software (gravação no "hdmi input", reprodução no "primary output"). O endereço
     tem de ser o mesmo de ro.vendor.hy300.hdmiin.audio_address (HAL de TV input). Sem microfone e
     sem saída HDMI.
+
+    O HDMI In é AUDIO_DEVICE_IN_TV_TUNER, não AUDIO_DEVICE_IN_HDMI: o HAL de áudio AIDL de exemplo
+    só aceita em <attachedDevices> dispositivo de conexão vazia (XsdcConversion.cpp,
+    convertDevicePortsInModuleToAidl), e o IN_HDMI tem conexão "hdmi". Com o IN_HDMI anexado o HAL
+    abortava em laço e o boot parava (boot 6). O RK628 é soldado na placa, então o dispositivo é
+    embutido e está sempre presente; tools/check_audio_policy.py confere essas regras no host.
 -->
 <module name="primary" halVersion="2.0">
     <attachedDevices>
@@ -29,7 +35,7 @@
     </mixPorts>
     <devicePorts>
         <devicePort tagName="Speaker" type="AUDIO_DEVICE_OUT_SPEAKER" role="sink"/>
-        <devicePort tagName="HDMI In" type="AUDIO_DEVICE_IN_HDMI" role="source"
+        <devicePort tagName="HDMI In" type="AUDIO_DEVICE_IN_TV_TUNER" role="source"
                     address="CARD_1_DEV_0">
             <profile name="" format="AUDIO_FORMAT_PCM_16_BIT"
                      samplingRates="32000,44100,48000" channelMasks="AUDIO_CHANNEL_IN_STEREO"/>

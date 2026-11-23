@@ -48,11 +48,12 @@ CableConnectionStatus toAidl(Cable cable) {
 }
 
 // "HDMI In" do audio_policy, no endereço ALSA da placa rockchiphdmiin: o framework faz o
-// patch de software dele para a saída atual quando a entrada é aberta.
+// patch de software dele para a saída atual quando a entrada é aberta. O tipo é IN_TV_TUNER
+// (embutido, conexão vazia), o mesmo do audio_policy: o HAL de áudio de exemplo recusa um
+// dispositivo com conexão "hdmi" anexado ao módulo (boot 6).
 AudioDevice buildAudioDevice(const std::string& address) {
     AudioDevice device;
-    device.type.type = AudioDeviceType::IN_DEVICE;
-    device.type.connection = AudioDeviceDescription::CONNECTION_HDMI;
+    device.type.type = AudioDeviceType::IN_TV_TUNER;
     device.address = AudioDeviceAddress::make<AudioDeviceAddress::Tag::id>(address);
     return device;
 }

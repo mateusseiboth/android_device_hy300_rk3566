@@ -15,7 +15,8 @@ import java.util.ArrayList;
  * Áudio da entrada HDMI (placa rockchiphdmiin, "HDMI In" CARD_1_DEV_0 no audio policy) no
  * alto-falante enquanto a entrada está aberta: um patch HDMI In -> saída, como o
  * TvInputHardwareManager faz para os TV inputs de hardware. Sem rota direta no audio policy, o
- * AudioFlinger monta a ponte por software.
+ * AudioFlinger monta a ponte por software. No audio policy o HDMI In é DEVICE_IN_TV_TUNER
+ * (embutido): o HAL de áudio de exemplo não aceita o tipo HDMI (conexão "hdmi") anexado.
  */
 final class AudioRoute {
     private static final String TAG = "HY300Hdmi";
@@ -36,7 +37,7 @@ final class AudioRoute {
             addresses[i] = ports.get(i).address();
         }
         int source = AudioPortChooser.pick(roles, types, addresses, AudioPort.ROLE_SOURCE,
-                AudioSystem.DEVICE_IN_HDMI, HDMI_ADDRESS);
+                AudioSystem.DEVICE_IN_TV_TUNER, HDMI_ADDRESS);
         int sink = AudioPortChooser.pick(roles, types, addresses, AudioPort.ROLE_SINK,
                 AudioSystem.DEVICE_OUT_SPEAKER, null);
         if (source < 0 || sink < 0) {

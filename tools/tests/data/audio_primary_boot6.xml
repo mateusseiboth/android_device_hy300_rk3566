@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    SPDX-FileCopyrightText: 2026 Mateus Seiboth
+    SPDX-License-Identifier: Apache-2.0
+
+    Módulo primário do HY300: o alto-falante (card 0, I2S1) e a captura da entrada HDMI (placa
+    "rockchiphdmiin", I2S3 do RK628). O HAL AIDL de exemplo escolhe a placa ALSA pelo endereço
+    "CARD_<placa>_DEV_<dispositivo>". O HDMI In não tem rota para o alto-falante de propósito: o
+    TvInputHardwareManager pede o patch HDMI In -> saída e, sem rota direta, o audio policy monta
+    a ponte por software (gravação no "hdmi input", reprodução no "primary output"). O endereço
+    tem de ser o mesmo de ro.vendor.hy300.hdmiin.audio_address (HAL de TV input). Sem microfone e
+    sem saída HDMI.
+-->
+<module name="primary" halVersion="2.0">
+    <attachedDevices>
+        <item>Speaker</item>
+        <item>HDMI In</item>
+    </attachedDevices>
+    <defaultOutputDevice>Speaker</defaultOutputDevice>
+    <mixPorts>
+        <mixPort name="primary output" role="source" flags="AUDIO_OUTPUT_FLAG_PRIMARY">
+            <profile name="" format="AUDIO_FORMAT_PCM_16_BIT"
+                     samplingRates="48000" channelMasks="AUDIO_CHANNEL_OUT_STEREO"/>
+        </mixPort>
+        <mixPort name="hdmi input" role="sink">
+            <profile name="" format="AUDIO_FORMAT_PCM_16_BIT"
+                     samplingRates="32000,44100,48000" channelMasks="AUDIO_CHANNEL_IN_STEREO"/>
+        </mixPort>
+    </mixPorts>
+    <devicePorts>
+        <devicePort tagName="Speaker" type="AUDIO_DEVICE_OUT_SPEAKER" role="sink"/>
+        <devicePort tagName="HDMI In" type="AUDIO_DEVICE_IN_HDMI" role="source"
+                    address="CARD_1_DEV_0">
+            <profile name="" format="AUDIO_FORMAT_PCM_16_BIT"
+                     samplingRates="32000,44100,48000" channelMasks="AUDIO_CHANNEL_IN_STEREO"/>
+        </devicePort>
+    </devicePorts>
+    <routes>
+        <route type="mix" sink="Speaker" sources="primary output"/>
+        <route type="mix" sink="hdmi input" sources="HDMI In"/>
+    </routes>
+</module>

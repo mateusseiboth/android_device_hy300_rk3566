@@ -1,0 +1,22 @@
+HY300: YUV com HW_COMPOSER aloca sem scanout (vídeo em SurfaceView no backend dumb).
+
+diff --git a/cros_gralloc/cros_gralloc_driver.cc b/cros_gralloc/cros_gralloc_driver.cc
+index 706dee9..5803fff 100644
+--- a/cros_gralloc/cros_gralloc_driver.cc
++++ b/cros_gralloc/cros_gralloc_driver.cc
+@@ -215,6 +215,15 @@ bool cros_gralloc_driver::get_resolved_format_and_use_flags(
+ 		resolved_use_flags |= BO_USE_LINEAR;
+ 		combo = drv_get_combination(drv_.get(), resolved_format, resolved_use_flags);
+ 	}
++	if (!combo && (descriptor->droid_usage & GRALLOC_USAGE_HW_COMPOSER)) {
++		/*
++		 * HY300: HW_COMPOSER é só dica (o HWC compõe pela GPU o que não vai a um plano), mas
++		 * vira BO_USE_SCANOUT, e o backend dumb só aceita scanout em RGB. Sem isto, todo vídeo
++		 * YUV numa SurfaceView (consumidor BLAST com TEXTURE|COMPOSER) não aloca.
++		 */
++		resolved_use_flags &= ~BO_USE_SCANOUT;
++		combo = drv_get_combination(drv_.get(), resolved_format, resolved_use_flags);
++	}
+ 	if (!combo)
+ 		return false;
+ 

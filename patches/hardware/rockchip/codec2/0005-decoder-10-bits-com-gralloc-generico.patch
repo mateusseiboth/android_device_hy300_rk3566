@@ -1,0 +1,175 @@
+HY300: vídeo 10 bits (HEVC Main10, VP9 perfil 2) com o gralloc genérico.
+
+No buffer mode do minigbm o MPP decodifica em NV15 e a RGA converte para NV12 de 8 bits.
+Corrige a wstride da RGA (pixels, não os bytes do hor_stride do MPP) e não anuncia P010,
+que o minigbm genérico não aloca (ro.board.api_level >= 33 o ligava).
+
+diff --git a/component/osal/Android.bp b/component/osal/Android.bp
+index 66817eb..1d4552e 100644
+--- a/component/osal/Android.bp
++++ b/component/osal/Android.bp
+@@ -54,3 +54,16 @@ cc_library_static {
+         "hardware/rockchip/librga/im2d_api",
+     ],
+ }
++
++// HY300: regras do vídeo 10 bits com o gralloc genérico (minigbm), só C++ padrão.
++cc_test_host {
++    name: "libcodec2_rk_generic_gralloc_test",
++    srcs: ["tests/C2RKGenericGrallocTest.cpp"],
++    local_include_dirs: ["include"],
++    cflags: [
++        "-Wall",
++        "-Werror",
++        "-Wextra",
++        "-Wconversion",
++    ],
++}
+diff --git a/component/osal/include/C2RKGenericGralloc.h b/component/osal/include/C2RKGenericGralloc.h
+new file mode 100644
+index 0000000..253451d
+--- /dev/null
++++ b/component/osal/include/C2RKGenericGralloc.h
+@@ -0,0 +1,36 @@
++/*
++ * SPDX-FileCopyrightText: 2026 Mateus Seiboth
++ * SPDX-License-Identifier: Apache-2.0
++ */
++
++#pragma once
++
++#include <cstdint>
++
++// HY300: vídeo 10 bits (HEVC Main10, VP9 perfil 2, H.264 High10) com o gralloc genérico
++// (minigbm). O decodificador fica em "buffer mode": o MPP decodifica em 10 bits compacto (NV15)
++// nos buffers dele e a RGA (ou a CPU) converte para NV12 de 8 bits no bloco do minigbm, que é o
++// que a GPU (Panfrost) e o painel de 8 bits usam. Sem dependência do Android, para os testes.
++namespace android::c2_rk_generic {
++
++// system/core/libsystem/include/system/graphics-base-v1.*.h
++constexpr uint32_t kHalYcbcr420888 = 0x23;  // HAL_PIXEL_FORMAT_YCBCR_420_888
++constexpr uint32_t kHalYcbcrP010 = 0x36;    // HAL_PIXEL_FORMAT_YCBCR_P010
++
++// mpp_frame_get_hor_stride() do 10 bits compacto está em bytes (4 pixels em 5 bytes); a
++// wstride da RGA (RK_FORMAT_YCbCr_420_SP_10B) está em pixels.
++constexpr int32_t toRgaWidthStride(bool is10bit, int32_t horStrideBytes) {
++    return is10bit ? horStrideBytes * 8 / 10 : horStrideBytes;
++}
++
++// O minigbm genérico não tem DRM_FORMAT_P010 (dumb_driver.c), então P010 só vale com o gralloc
++// da Rockchip.
++constexpr bool isP010Usable(bool genericGralloc, bool allowedByApiLevel) {
++    return !genericGralloc && allowedByApiLevel;
++}
++
++constexpr uint32_t selectOutputPixelFormat(bool genericGralloc, uint32_t requested) {
++    return genericGralloc && requested == kHalYcbcrP010 ? kHalYcbcr420888 : requested;
++}
++
++}  // namespace android::c2_rk_generic
+diff --git a/component/osal/tests/C2RKGenericGrallocTest.cpp b/component/osal/tests/C2RKGenericGrallocTest.cpp
+new file mode 100644
+index 0000000..e381e75
+--- /dev/null
++++ b/component/osal/tests/C2RKGenericGrallocTest.cpp
+@@ -0,0 +1,44 @@
++/*
++ * SPDX-FileCopyrightText: 2026 Mateus Seiboth
++ * SPDX-License-Identifier: Apache-2.0
++ *
++ * HY300: regras do vídeo 10 bits com o gralloc genérico (minigbm). Rodam no host.
++ */
++
++#include <gtest/gtest.h>
++
++#include "C2RKGenericGralloc.h"
++
++namespace android::c2_rk_generic {
++namespace {
++
++// O MPP dá o stride horizontal do 10 bits compacto (NV15) em bytes; a RGA quer pixels.
++TEST(GenericGrallocStrideTest, tenBitStrideGoesFromBytesToPixels) {
++    EXPECT_EQ(toRgaWidthStride(true, 2400), 1920);
++    EXPECT_EQ(toRgaWidthStride(true, 2560), 2048);
++}
++
++TEST(GenericGrallocStrideTest, eightBitStrideIsAlreadyInPixels) {
++    EXPECT_EQ(toRgaWidthStride(false, 1920), 1920);
++}
++
++// O minigbm genérico não aloca P010 e nem a GPU (Panfrost) nem o VOP2 o leem no nosso
++// caminho: o decodificador não pode anunciar P010, mesmo que o nível de API permita.
++TEST(GenericGrallocP010Test, genericGrallocNeverOffersP010) {
++    EXPECT_FALSE(isP010Usable(true, true));
++    EXPECT_FALSE(isP010Usable(true, false));
++}
++
++TEST(GenericGrallocP010Test, rockchipGrallocFollowsTheApiLevel) {
++    EXPECT_TRUE(isP010Usable(false, true));
++    EXPECT_FALSE(isP010Usable(false, false));
++}
++
++TEST(GenericGrallocFormatTest, p010RequestFallsBackToEightBitNv12) {
++    EXPECT_EQ(selectOutputPixelFormat(true, kHalYcbcrP010), kHalYcbcr420888);
++    EXPECT_EQ(selectOutputPixelFormat(true, kHalYcbcr420888), kHalYcbcr420888);
++    EXPECT_EQ(selectOutputPixelFormat(false, kHalYcbcrP010), kHalYcbcrP010);
++}
++
++}  // namespace
++}  // namespace android::c2_rk_generic
+diff --git a/component/video/C2RKMpiDec.cpp b/component/video/C2RKMpiDec.cpp
+index f84f2c1..66fb48c 100644
+--- a/component/video/C2RKMpiDec.cpp
++++ b/component/video/C2RKMpiDec.cpp
+@@ -39,6 +39,7 @@
+ #include "C2RKTunneledSession.h"
+ #include "C2RKPropsDef.h"
+ #include "C2RKVersion.h"
++#include "C2RKGenericGralloc.h"
+ 
+ namespace android {
+ 
+@@ -61,6 +62,9 @@ constexpr bool kGenericGralloc = false;
+ constexpr uint64_t kGenericUsageMask = ~0ULL;
+ #endif
+ 
++static_assert(c2_rk_generic::kHalYcbcr420888 == HAL_PIXEL_FORMAT_YCBCR_420_888);
++static_assert(c2_rk_generic::kHalYcbcrP010 == HAL_PIXEL_FORMAT_YCBCR_P010);
++
+ constexpr uint32_t kMaxVideoWidth = 8192;
+ constexpr uint32_t kMaxVideoHeight = 4320;
+ 
+@@ -135,7 +139,8 @@ public:
+                 .build());
+ 
+         std::vector<uint32_t> pixelFormats = {HAL_PIXEL_FORMAT_YCBCR_420_888};
+-        if (C2RKMediaUtils::isP010Allowed()) {
++        // HY300: com o minigbm genérico o 10 bits sai em NV12 de 8 bits; P010 não é alocável.
++        if (c2_rk_generic::isP010Usable(kGenericGralloc, C2RKMediaUtils::isP010Allowed())) {
+             pixelFormats.push_back(HAL_PIXEL_FORMAT_YCBCR_P010);
+         }
+ 
+@@ -1408,7 +1413,8 @@ c2_status_t C2RKMpiDec::updateDecoderArgs(const std::shared_ptr<C2BlockPool> &po
+         IntfImpl::Lock lock = mIntf->lock();
+         int32_t width       = mIntf->getSize_l()->width;
+         int32_t height      = mIntf->getSize_l()->height;
+-        int32_t pixelFormat = mIntf->getPixelFormat_l()->value;
++        int32_t pixelFormat = static_cast<int32_t>(c2_rk_generic::selectOutputPixelFormat(
++                kGenericGralloc, mIntf->getPixelFormat_l()->value));
+         int32_t colorFormat = mIntf->getIs10bit() ? MPP_FMT_YUV420SP_10BIT : MPP_FMT_YUV420SP;
+         bool    tunneled    = mIntf->getIsTunnelMode();
+         bool    bufferMode  = (pool->getLocalId() <= C2BlockPool::PLATFORM_START);
+@@ -2904,8 +2910,12 @@ c2_status_t C2RKMpiDec::getoutframe(WorkEntry *entry) {
+         if (mUseRgaBlit) {
+             RgaInfo srcInfo, dstInfo;
+ 
++            // HY300: no buffer mode do gralloc genérico a RGA lê o NV15 do MPP; a wstride dela é
++            // em pixels e o hor_stride do MPP, em bytes.
++            const int32_t srcWStride = c2_rk_generic::toRgaWidthStride(
++                    kGenericGralloc && MPP_FRAME_FMT_IS_YUV_10BIT(format), hstride);
+             C2RKRgaDef::SetRgaInfo(
+-                    &srcInfo, srcFd, srcFmt, width, height, hstride, vstride);
++                    &srcInfo, srcFd, srcFmt, width, height, srcWStride, vstride);
+             C2RKRgaDef::SetRgaInfo(
+                     &dstInfo, dstFd, dstFmt, width, height, dstStride, dstVStride);
+             if (!C2RKRgaDef::DoBlit(srcInfo, dstInfo)) {

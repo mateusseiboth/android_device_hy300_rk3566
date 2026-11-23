@@ -9,6 +9,7 @@ dos projetos do AOSP que não depende do Android), sem o build do Soong.
 Os arquivos são tirados do próprio patch com `git apply --include`, então o que é testado é
 exatamente o que vai para o checkout.
 """
+import contextlib
 import os
 import shutil
 import subprocess
@@ -34,6 +35,14 @@ def extract(patch, includes, destination):
     args = ["git", "apply", *[f"--include={pattern}" for pattern in includes]]
     subprocess.run([*args, os.path.abspath(patch)], cwd=destination, check=True,
                    capture_output=True, text=True)
+
+
+@contextlib.contextmanager
+def extracted(patch, includes):
+    """Diretório temporário com os caminhos `includes` do patch aplicados."""
+    with tempfile.TemporaryDirectory() as work:
+        extract(patch, includes, work)
+        yield work
 
 
 def run_sources(sources, extra_flags=(), std="c++20"):

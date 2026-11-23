@@ -1,3 +1,28 @@
 # Motor de foco: nó focus-motor do DT (txcz,hy300-focus-motor), classe motor_cc.
 genfscon sysfs /devices/platform/focus-motor/motor_cc/motor_cc/motor u:object_r:sysfs_hy300_motor:s0
 genfscon sysfs /devices/platform/focus-motor/motor_cc/motor_cc/hd_camera_on u:object_r:sysfs_hy300_motor:s0
+
+# LEDs indicadores (gpio-leds green/red; Fan_h e Lcd_power ficam só para o init).
+genfscon sysfs /devices/platform/gpio-leds/leds/green/brightness u:object_r:sysfs_hy300_leds:s0
+genfscon sysfs /devices/platform/gpio-leds/leds/red/brightness u:object_r:sysfs_hy300_leds:s0
+
+# Conectores DRM (status e modes), que a animação de boot lê para saber o tamanho da tela.
+genfscon sysfs /devices/platform/display-subsystem/drm u:object_r:sysfs_hy300_display:s0
+
+# GPU (Panfrost): o Mesa lê o uevent do dispositivo para achar o driver.
+genfscon sysfs /devices/platform/fde60000.gpu u:object_r:sysfs_gpu:s0
+
+# Governadores do devfreq (GPU e DDR) que o init.rk3566.rc põe em performance.
+genfscon sysfs /devices/platform/fde60000.gpu/devfreq u:object_r:sysfs_hy300_devfreq:s0
+genfscon sysfs /devices/platform/dmc/devfreq u:object_r:sysfs_hy300_devfreq:s0
+
+# Cabo USB (extcon do PHY USB2), que o system_server lê.
+genfscon sysfs /devices/platform/fe8a0000.usb2-phy/extcon u:object_r:sysfs_extcon:s0
+
+# Chip, para o Codec2 da Rockchip.
+genfscon sysfs /firmware/devicetree/base/compatible u:object_r:sysfs_hy300_dt_compatible:s0
+
+# Bluetooth: rfkill "bt_default" (rfkill-rk, nó wireless-bluetooth do DT) e "bluetooth"
+# (aic8800_btlpm, dispositivo aic-bt), que o hy300-bt-uart liga.
+genfscon sysfs /devices/platform/wireless-bluetooth/rfkill u:object_r:sysfs_bluetooth_writable:s0
+genfscon sysfs /devices/platform/aic-bt/rfkill u:object_r:sysfs_bluetooth_writable:s0

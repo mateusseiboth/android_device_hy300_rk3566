@@ -1,0 +1,1 @@
+/dev/hy300-bootlog(/.*)?        u:object_r:hy300_bootlog_dev_file:s0

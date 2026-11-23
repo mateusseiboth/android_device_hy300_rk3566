@@ -1,0 +1,8 @@
+# Processos do sistema que carregam o EGL/Vulkan do Mesa (Panfrost) e o mapper do minigbm:
+# abrem o render node e leem o uevent da GPU. Mesmo modelo do device/generic/goldfish.
+allow { surfaceflinger bootanim system_server } gpu_device:dir search;
+allow { surfaceflinger bootanim system_server } gpu_device:chr_file rw_file_perms;
+r_dir_file({ surfaceflinger bootanim system_server }, sysfs_gpu)
+
+# O minigbm e o Mesa leem props de depuração que não existem aqui.
+dontaudit { surfaceflinger bootanim system_server zygote } vendor_default_prop:file read;

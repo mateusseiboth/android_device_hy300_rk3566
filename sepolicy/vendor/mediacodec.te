@@ -1,0 +1,4 @@
+# Codec2 da Rockchip: MPP (/dev/mpp_service) e RGA (/dev/rga) como video_device, e o
+# compatible do DT para reconhecer o RK3566.
+allow mediacodec video_device:chr_file rw_file_perms;
+allow mediacodec sysfs_hy300_dt_compatible:file r_file_perms;

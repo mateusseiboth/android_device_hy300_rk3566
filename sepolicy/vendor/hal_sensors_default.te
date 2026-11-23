@@ -1,0 +1,9 @@
+# HAL de sensores do HY300 (sensors/): acelerômetro pelo framework "gsensor" da Rockchip
+# (/dev/mma8452_daemon + /dev/input/eventN) ou IIO, escolhido pelas props ro.vendor.hy300.accel.*.
+allow hal_sensors_default hy300_gsensor_device:chr_file rw_file_perms;
+allow hal_sensors_default input_device:dir r_dir_perms;
+allow hal_sensors_default input_device:chr_file r_file_perms;
+# Acha o /dev/input/eventN pelo nome em /sys/class/input/eventN/device/name (e o IIO pelo
+# /sys/bus/iio/devices/*/name, se o backend for iio).
+r_dir_file(hal_sensors_default, sysfs)
+get_prop(hal_sensors_default, vendor_hy300_hw_prop)

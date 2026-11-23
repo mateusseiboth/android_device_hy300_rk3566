@@ -1,0 +1,15 @@
+HY300: o HAL AIDL padrão de Bluetooth declara a "interface" no init.
+
+Sem a linha, o servicemanager não sabe a quem pedir o IBluetoothHci/default e o
+tools/check_vintf_hals.py da árvore acusa o HAL declarado sem serviço.
+
+diff --git a/bluetooth/aidl/default/bluetooth-service-default.rc b/bluetooth/aidl/default/bluetooth-service-default.rc
+index dc78698..38a4582 100644
+--- a/bluetooth/aidl/default/bluetooth-service-default.rc
++++ b/bluetooth/aidl/default/bluetooth-service-default.rc
+@@ -1,4 +1,5 @@
+ service vendor.bluetooth-default /vendor/bin/hw/android.hardware.bluetooth-service.default
++    interface aidl android.hardware.bluetooth.IBluetoothHci/default
+     class hal
+     capabilities BLOCK_SUSPEND NET_ADMIN SYS_NICE
+     user bluetooth

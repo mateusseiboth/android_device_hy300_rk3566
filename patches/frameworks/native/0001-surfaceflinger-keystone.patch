@@ -1,0 +1,971 @@
+HY300: keystone (correção de trapézio) no SurfaceFlinger.
+
+Lê persist.sys.keystone.{lt,lb,rt,rb} ("x,y" em px de 1280x720, y para cima) quando
+persist.sys.keystone.update vira 1, como o SurfaceFlinger da Rockchip da fábrica, e aplica a
+homografia na composição pelo cliente do display principal (RenderEngine Skia).
+
+diff --git a/libs/renderengine/include/renderengine/DisplaySettings.h b/libs/renderengine/include/renderengine/DisplaySettings.h
+index cc3c900..1073041 100644
+--- a/libs/renderengine/include/renderengine/DisplaySettings.h
++++ b/libs/renderengine/include/renderengine/DisplaySettings.h
+@@ -70,6 +70,11 @@ struct DisplaySettings {
+     // ignore it. Some draws (e.g. screen decorations) may need it, though.
+     bool deviceHandlesColorTransform = false;
+ 
++    // Projective transform applied to the whole output, in physical display pixels, after
++    // everything else (HY300 keystone correction). Identity when unused. Only the x, y and w
++    // rows/columns are meaningful (2D homography).
++    mat4 keystoneTransform = mat4();
++
+     // An additional orientation flag to be applied after clipping the output.
+     // By way of example, this may be used for supporting fullscreen screenshot
+     // capture of a device in landscape while the buffer is in portrait
+@@ -117,6 +122,7 @@ static inline bool operator==(const DisplaySettings& lhs, const DisplaySettings&
+             lhs.colorTransform == rhs.colorTransform &&
+             lhs.deviceHandlesColorTransform == rhs.deviceHandlesColorTransform &&
+             lhs.orientation == rhs.orientation &&
++            lhs.keystoneTransform == rhs.keystoneTransform &&
+             lhs.targetLuminanceNits == rhs.targetLuminanceNits &&
+             lhs.dimmingStage == rhs.dimmingStage && lhs.renderIntent == rhs.renderIntent;
+ }
+@@ -162,6 +168,8 @@ static inline void PrintTo(const DisplaySettings& settings, ::std::ostream* os,
+     PrintMatrix(settings.colorTransform, os);
+     *os << newline << ".deviceHandlesColorTransform = " << settings.deviceHandlesColorTransform;
+     *os << newline << ".orientation = " << orientation_to_string(settings.orientation);
++    *os << newline << ".keystoneTransform = ";
++    PrintMatrix(settings.keystoneTransform, os);
+     *os << newline << ".targetLuminanceNits = " << settings.targetLuminanceNits;
+     *os << newline << ".dimmingStage = "
+         << aidl::android::hardware::graphics::composer3::toString(settings.dimmingStage).c_str();
+diff --git a/libs/renderengine/skia/SkiaRenderEngine.cpp b/libs/renderengine/skia/SkiaRenderEngine.cpp
+index c4b5c1f..65dc3e9 100644
+--- a/libs/renderengine/skia/SkiaRenderEngine.cpp
++++ b/libs/renderengine/skia/SkiaRenderEngine.cpp
+@@ -778,6 +778,13 @@ void SkiaRenderEngine::initCanvas(SkCanvas* canvas, const DisplaySettings& displ
+     canvas->clipRect(getSkRect(display.physicalDisplay));
+     canvas->translate(display.physicalDisplay.left, display.physicalDisplay.top);
+ 
++    // HY300 keystone: the homography maps the composed output into the corrected quad. It is in
++    // physical display pixels, so it goes before the logical-to-physical scale and rotation.
++    // The canvas was cleared before, so whatever falls outside the quad stays black.
++    if (display.keystoneTransform != mat4()) {
++        canvas->concat(getSkM44(display.keystoneTransform).asM33());
++    }
++
+     const auto clipWidth = display.clip.width();
+     const auto clipHeight = display.clip.height();
+     auto rotatedClipWidth = clipWidth;
+@@ -1435,7 +1442,9 @@ void SkiaRenderEngine::drawLayersInternal(
+ 
+             sk_sp<SkShader> shader;
+ 
+-            if (layer.source.buffer.useTextureFiltering) {
++            // Under the keystone homography every buffer is resampled: nearest sampling
++            // would alias.
++            if (layer.source.buffer.useTextureFiltering || display.keystoneTransform != mat4()) {
+                 shader = image->makeShader(SkTileMode::kClamp, SkTileMode::kClamp,
+                                            SkSamplingOptions(
+                                                    {SkFilterMode::kLinear, SkMipmapMode::kNone}),
+diff --git a/services/surfaceflinger/Android.bp b/services/surfaceflinger/Android.bp
+index f69e5bc..a84b96f 100644
+--- a/services/surfaceflinger/Android.bp
++++ b/services/surfaceflinger/Android.bp
+@@ -294,6 +294,8 @@ filegroup {
+         "FrontEnd/Caching/TexturePool.cpp",
+         "HdrLayerInfoReporter.cpp",
+         "HdrSdrRatioOverlay.cpp",
++        "Keystone/KeystoneController.cpp",
++        "Keystone/KeystoneMath.cpp",
+         "RenderResourceCache.cpp",
+         "Jank/JankTracker.cpp",
+         "Layer.cpp",
+@@ -491,3 +493,15 @@ genrule {
+         "statslog_surfaceflinger.cpp",
+     ],
+ }
++
++// HY300: matemática do keystone (Keystone/KeystoneMath), só C++ padrão; roda também no host.
++cc_test {
++    name: "libsurfaceflinger_keystone_test",
++    defaults: ["surfaceflinger_defaults"],
++    host_supported: true,
++    srcs: [
++        "Keystone/KeystoneMath.cpp",
++        "Keystone/tests/KeystoneMathTest.cpp",
++    ],
++    test_suites: ["general-tests"],
++}
+diff --git a/services/surfaceflinger/CompositionEngine/include/compositionengine/CompositionRefreshArgs.h b/services/surfaceflinger/CompositionEngine/include/compositionengine/CompositionRefreshArgs.h
+index 27f791f..13033ea 100644
+--- a/services/surfaceflinger/CompositionEngine/include/compositionengine/CompositionRefreshArgs.h
++++ b/services/surfaceflinger/CompositionEngine/include/compositionengine/CompositionRefreshArgs.h
+@@ -83,6 +83,16 @@ struct CompositionRefreshArgs {
+     // If a layer is on layer stack specified here, it will client composite.
+     std::unordered_set<ui::LayerStack> forcedClientCompositionLayerStacks;
+ 
++    // Keystone correction (HY300): homography, in physical display pixels, that the client
++    // composition of one display applies to its whole output. It forces client composition on
++    // that display only (a virtual display mirroring the same layer stack is left alone).
++    // Without it every output goes back to identity.
++    struct KeystoneRequest {
++        DisplayId displayId;
++        mat4 transform;
++    };
++    std::optional<KeystoneRequest> keystone;
++
+     // If set, causes the dirty regions to flash with the delay
+     std::optional<std::chrono::microseconds> devOptFlashDirtyRegionsDelay;
+ 
+diff --git a/services/surfaceflinger/CompositionEngine/include/compositionengine/impl/Output.h b/services/surfaceflinger/CompositionEngine/include/compositionengine/impl/Output.h
+index 1b7b2e0..8e23e60 100644
+--- a/services/surfaceflinger/CompositionEngine/include/compositionengine/impl/Output.h
++++ b/services/surfaceflinger/CompositionEngine/include/compositionengine/impl/Output.h
+@@ -179,6 +179,7 @@ protected:
+ 
+ private:
+     void dirtyEntireOutput();
++    void updateKeystoneTransform(const compositionengine::CompositionRefreshArgs&);
+     compositionengine::OutputLayer* findLayerRequestingBackgroundComposition() const;
+     void sanitizeOutputLayers() const;
+     void finishPrepareFrame();
+diff --git a/services/surfaceflinger/CompositionEngine/include/compositionengine/impl/OutputCompositionState.h b/services/surfaceflinger/CompositionEngine/include/compositionengine/impl/OutputCompositionState.h
+index c7f6a9c..17999e5 100644
+--- a/services/surfaceflinger/CompositionEngine/include/compositionengine/impl/OutputCompositionState.h
++++ b/services/surfaceflinger/CompositionEngine/include/compositionengine/impl/OutputCompositionState.h
+@@ -110,6 +110,9 @@ struct OutputCompositionState {
+     // The color transform matrix to apply
+     mat4 colorTransformMatrix;
+ 
++    // Keystone (HY300) homography applied to the client composition, identity when unused
++    mat4 keystoneTransform;
++
+     // Current active color mode
+     ui::ColorMode colorMode{ui::ColorMode::NATIVE};
+ 
+diff --git a/services/surfaceflinger/CompositionEngine/src/Output.cpp b/services/surfaceflinger/CompositionEngine/src/Output.cpp
+index 28250e0..8040bf6 100644
+--- a/services/surfaceflinger/CompositionEngine/src/Output.cpp
++++ b/services/surfaceflinger/CompositionEngine/src/Output.cpp
+@@ -273,6 +273,19 @@ void Output::setColorTransform(const compositionengine::CompositionRefreshArgs&
+     dirtyEntireOutput();
+ }
+ 
++void Output::updateKeystoneTransform(const compositionengine::CompositionRefreshArgs& args) {
++    const bool isKeystoneOutput = args.keystone && getDisplayId() == args.keystone->displayId;
++    const mat4 keystoneTransform = isKeystoneOutput ? args.keystone->transform : mat4();
++    auto& current = editState().keystoneTransform;
++    if (current == keystoneTransform) {
++        return;
++    }
++
++    current = keystoneTransform;
++
++    dirtyEntireOutput();
++}
++
+ void Output::setColorProfile(const ColorProfile& colorProfile) {
+     auto& outputState = editState();
+     if (outputState.colorMode == colorProfile.mode &&
+@@ -481,6 +494,7 @@ ftl::Future<std::monostate> Output::present(
+     }
+     ALOGV(__FUNCTION__);
+     updateColorProfile(refreshArgs);
++    updateKeystoneTransform(refreshArgs);
+     updateCompositionState(refreshArgs);
+     planComposition();
+     writeCompositionState(refreshArgs);
+@@ -887,6 +901,8 @@ void Output::updateCompositionState(const compositionengine::CompositionRefreshA
+ 
+     mLayerRequestingBackgroundBlur = findLayerRequestingBackgroundComposition();
+     bool forceClientComposition = mLayerRequestingBackgroundBlur != nullptr;
++    // The keystone homography is applied by the client composition to the whole output.
++    const bool keystoneForcesClientComposition = getState().keystoneTransform != mat4();
+ 
+     auto* properties = getOverlaySupport();
+ 
+@@ -894,7 +910,8 @@ void Output::updateCompositionState(const compositionengine::CompositionRefreshA
+         const ui::LayerStack outputLayerStack =
+                 layer->getOutput().getState().layerFilter.layerStack;
+         const bool layerForceClientComposition =
+-                refreshArgs.forcedClientCompositionLayerStacks.contains(outputLayerStack);
++                refreshArgs.forcedClientCompositionLayerStacks.contains(outputLayerStack) ||
++                keystoneForcesClientComposition;
+ 
+         layer->updateCompositionState(refreshArgs.updatingGeometryThisFrame,
+                                       layerForceClientComposition || forceClientComposition,
+@@ -1553,6 +1570,7 @@ renderengine::DisplaySettings Output::generateClientCompositionDisplaySettings(
+ 
+     // Compute the global color transform matrix.
+     clientCompositionDisplay.colorTransform = outputState.colorTransformMatrix;
++    clientCompositionDisplay.keystoneTransform = outputState.keystoneTransform;
+     clientCompositionDisplay.deviceHandlesColorTransform =
+             outputState.usesDeviceComposition || getSkipColorTransform();
+ 
+diff --git a/services/surfaceflinger/CompositionEngine/src/OutputCompositionState.cpp b/services/surfaceflinger/CompositionEngine/src/OutputCompositionState.cpp
+index 6683e67..832da31 100644
+--- a/services/surfaceflinger/CompositionEngine/src/OutputCompositionState.cpp
++++ b/services/surfaceflinger/CompositionEngine/src/OutputCompositionState.cpp
+@@ -56,6 +56,9 @@ void OutputCompositionState::dump(std::string& out) const {
+     out.append("\n   ");
+     dumpVal(out, "colorTransformMatrix", colorTransformMatrix);
+ 
++    out.append("\n   ");
++    dumpVal(out, "keystoneTransform", keystoneTransform);
++
+     out.append("\n   ");
+     dumpVal(out, "displayBrightnessNits", displayBrightnessNits);
+     dumpVal(out, "sdrWhitePointNits", sdrWhitePointNits);
+diff --git a/services/surfaceflinger/Keystone/KeystoneController.cpp b/services/surfaceflinger/Keystone/KeystoneController.cpp
+new file mode 100644
+index 0000000..bb97ac8
+--- /dev/null
++++ b/services/surfaceflinger/Keystone/KeystoneController.cpp
+@@ -0,0 +1,152 @@
++/*
++ * SPDX-FileCopyrightText: 2026 Mateus Seiboth
++ * SPDX-License-Identifier: Apache-2.0
++ */
++
++#undef LOG_TAG
++#define LOG_TAG "SurfaceFlinger-Keystone"
++
++#include "KeystoneController.h"
++
++#include <android-base/properties.h>
++#include <android-base/stringprintf.h>
++#include <log/log.h>
++#include <pthread.h>
++#include <sys/system_properties.h>
++
++#include <cinttypes>
++#include <ctime>
++
++namespace android::surfaceflinger::keystone {
++namespace {
++
++constexpr const char* kUpdateProp = "persist.sys.keystone.update";
++constexpr const char* kResetProp = "persist.sys.keystone.reset";
++constexpr const char* kDisableProp = "persist.sys.keystone.disable";
++constexpr const char* kMirrorXProp = "persist.sys.keystone.mirror_x";
++constexpr const char* kMirrorYProp = "persist.sys.keystone.mirror_y";
++constexpr const char* kCornerProps[] = {
++        "persist.sys.keystone.lt",
++        "persist.sys.keystone.lb",
++        "persist.sys.keystone.rt",
++        "persist.sys.keystone.rb",
++};
++constexpr const char* kZeroCorner = "0,0";
++
++// Só para a thread conferir o pedido de parada de tempos em tempos.
++constexpr timespec kWaitTimeout = {.tv_sec = 5, .tv_nsec = 0};
++
++Point readCorner(const char* prop) {
++    const std::string text = base::GetProperty(prop, kZeroCorner);
++    if (const auto corner = parseCorner(text)) {
++        return *corner;
++    }
++    ALOGW("%s=\"%s\" não é \"x,y\"; usando 0,0", prop, text.c_str());
++    return {};
++}
++
++Config readConfig() {
++    Config config;
++    config.corners = {readCorner(kCornerProps[0]), readCorner(kCornerProps[1]),
++                      readCorner(kCornerProps[2]), readCorner(kCornerProps[3])};
++    config.mirrorX = parseFlag(base::GetProperty(kMirrorXProp, ""));
++    config.mirrorY = parseFlag(base::GetProperty(kMirrorYProp, ""));
++    config.disabled = parseFlag(base::GetProperty(kDisableProp, ""));
++    return config;
++}
++
++// persist.sys.keystone.reset=1 zera os 4 cantos, como a librkgfx_dc da fábrica.
++void applyResetRequest(Config& config) {
++    if (!parseFlag(base::GetProperty(kResetProp, ""))) {
++        return;
++    }
++    config.corners = {};
++    for (const char* prop : kCornerProps) {
++        base::SetProperty(prop, kZeroCorner);
++    }
++    base::SetProperty(kResetProp, "0");
++}
++
++std::string formatConfig(const Config& config) {
++    const auto& c = config.corners;
++    return base::StringPrintf("lt=%g,%g lb=%g,%g rt=%g,%g rb=%g,%g mirror_x=%d mirror_y=%d "
++                              "disable=%d",
++                              c.leftTop.x, c.leftTop.y, c.leftBottom.x, c.leftBottom.y,
++                              c.rightTop.x, c.rightTop.y, c.rightBottom.x, c.rightBottom.y,
++                              config.mirrorX, config.mirrorY, config.disabled);
++}
++
++} // namespace
++
++KeystoneController::KeystoneController(OnChange onChange) : mOnChange(std::move(onChange)) {
++    reload();
++    mThread = std::thread(&KeystoneController::run, this);
++}
++
++KeystoneController::~KeystoneController() {
++    mStop = true;
++    mThread.join();
++}
++
++std::optional<mat4> KeystoneController::getTransform(int32_t width, int32_t height) {
++    std::lock_guard lock(mMutex);
++    if (mCache && mCache->generation == mGeneration && mCache->width == width &&
++        mCache->height == height) {
++        return mCache->transform;
++    }
++    std::optional<mat4> transform;
++    if (const auto matrix = buildKeystoneMatrix(mConfig, static_cast<float>(width),
++                                                static_cast<float>(height))) {
++        const std::array<float, 16> columns = toColumnMajor4x4(*matrix);
++        transform = mat4(static_cast<const float*>(columns.data()));
++    }
++    mCache = Cache{mGeneration, width, height, transform};
++    return transform;
++}
++
++void KeystoneController::dump(std::string& out) const {
++    std::lock_guard lock(mMutex);
++    base::StringAppendF(&out, "Keystone: %s (geração %" PRIu64 ", %s)\n",
++                        formatConfig(mConfig).c_str(), mGeneration,
++                        mCache && mCache->transform ? "ativo" : "inativo");
++}
++
++void KeystoneController::reload() {
++    Config config = readConfig();
++    applyResetRequest(config);
++    ALOGI("cantos relidos: %s", formatConfig(config).c_str());
++    std::lock_guard lock(mMutex);
++    mConfig = config;
++    ++mGeneration;
++}
++
++void KeystoneController::run() {
++    pthread_setname_np(pthread_self(), "keystone");
++    uint32_t globalSerial = 0;
++    std::optional<uint32_t> handledSerial;
++    while (!mStop) {
++        waitForTrigger(globalSerial, handledSerial);
++    }
++}
++
++// O serial é lido antes do valor: um "1" gravado depois da leitura muda o serial e a espera
++// volta na hora. Cada serial é tratado uma vez só: se o "0" não puder ser gravado, a thread
++// dorme até a próxima gravação do app, sem reler nem pedir quadro a cada volta da espera.
++void KeystoneController::waitForTrigger(uint32_t& globalSerial,
++                                        std::optional<uint32_t>& handledSerial) {
++    const prop_info* info = __system_property_find(kUpdateProp);
++    if (info == nullptr) {
++        __system_property_wait(nullptr, globalSerial, &globalSerial, &kWaitTimeout);
++        return;
++    }
++    uint32_t serial = __system_property_serial(info);
++    if (serial != handledSerial && parseFlag(base::GetProperty(kUpdateProp, ""))) {
++        reload();
++        base::SetProperty(kUpdateProp, "0");
++        mOnChange();
++    }
++    handledSerial = serial;
++    __system_property_wait(info, serial, &serial, &kWaitTimeout);
++}
++
++} // namespace android::surfaceflinger::keystone
+diff --git a/services/surfaceflinger/Keystone/KeystoneController.h b/services/surfaceflinger/Keystone/KeystoneController.h
+new file mode 100644
+index 0000000..8b73744
+--- /dev/null
++++ b/services/surfaceflinger/Keystone/KeystoneController.h
+@@ -0,0 +1,63 @@
++/*
++ * SPDX-FileCopyrightText: 2026 Mateus Seiboth
++ * SPDX-License-Identifier: Apache-2.0
++ */
++
++#pragma once
++
++#include <android-base/thread_annotations.h>
++#include <math/mat4.h>
++
++#include <atomic>
++#include <cstdint>
++#include <functional>
++#include <mutex>
++#include <optional>
++#include <string>
++#include <thread>
++
++#include "KeystoneMath.h"
++
++namespace android::surfaceflinger::keystone {
++
++// Acompanha as props persist.sys.keystone.* numa thread própria, parada em
++// __system_property_wait (sem custo por quadro). Como na fábrica, os cantos só são relidos
++// quando persist.sys.keystone.update vira "1"; a thread devolve o gatilho para "0" e pede um
++// quadro novo. Na criação os valores atuais são lidos uma vez.
++class KeystoneController {
++public:
++    using OnChange = std::function<void()>;
++
++    explicit KeystoneController(OnChange onChange);
++    ~KeystoneController();
++
++    KeystoneController(const KeystoneController&) = delete;
++    KeystoneController& operator=(const KeystoneController&) = delete;
++
++    // Transformação do display de width x height px; nullopt quando não há keystone.
++    std::optional<mat4> getTransform(int32_t width, int32_t height);
++
++    void dump(std::string& out) const;
++
++private:
++    struct Cache {
++        uint64_t generation = 0;
++        int32_t width = 0;
++        int32_t height = 0;
++        std::optional<mat4> transform;
++    };
++
++    void run();
++    void waitForTrigger(uint32_t& globalSerial, std::optional<uint32_t>& handledSerial);
++    void reload();
++
++    const OnChange mOnChange;
++    mutable std::mutex mMutex;
++    Config mConfig GUARDED_BY(mMutex);
++    uint64_t mGeneration GUARDED_BY(mMutex) = 0;
++    std::optional<Cache> mCache GUARDED_BY(mMutex);
++    std::atomic_bool mStop = false;
++    std::thread mThread;
++};
++
++} // namespace android::surfaceflinger::keystone
+diff --git a/services/surfaceflinger/Keystone/KeystoneMath.cpp b/services/surfaceflinger/Keystone/KeystoneMath.cpp
+new file mode 100644
+index 0000000..a32cda7
+--- /dev/null
++++ b/services/surfaceflinger/Keystone/KeystoneMath.cpp
+@@ -0,0 +1,174 @@
++/*
++ * SPDX-FileCopyrightText: 2026 Mateus Seiboth
++ * SPDX-License-Identifier: Apache-2.0
++ */
++
++#include "KeystoneMath.h"
++
++#include <cmath>
++#include <cstdlib>
++#include <string>
++
++namespace android::surfaceflinger::keystone {
++namespace {
++
++constexpr double kEpsilon = 1e-9;
++
++std::string_view trim(std::string_view text) {
++    const auto first = text.find_first_not_of(" \t");
++    if (first == std::string_view::npos) {
++        return {};
++    }
++    const auto last = text.find_last_not_of(" \t");
++    return text.substr(first, last - first + 1);
++}
++
++std::optional<float> parseNumber(std::string_view text) {
++    const std::string_view trimmed = trim(text);
++    if (trimmed.empty()) {
++        return std::nullopt;
++    }
++    const std::string buffer(trimmed);
++    char* end = nullptr;
++    const float value = std::strtof(buffer.c_str(), &end);
++    if (end != buffer.c_str() + buffer.size() || !std::isfinite(value)) {
++        return std::nullopt;
++    }
++    return value;
++}
++
++bool isZero(Point point) {
++    return point.x == 0.f && point.y == 0.f;
++}
++
++bool hasOffset(const Corners& corners) {
++    return !isZero(corners.leftTop) || !isZero(corners.leftBottom) ||
++            !isZero(corners.rightTop) || !isZero(corners.rightBottom);
++}
++
++// Cantos do destino na ordem do contorno: lt, rt, rb, lb (px do display, y para baixo).
++std::array<Point, 4> buildDestination(const Corners& corners, float width, float height) {
++    const float scaleX = width / kLogicalWidth;
++    const float scaleY = height / kLogicalHeight;
++    const auto place = [&](Point base, Point offset) {
++        return Point{base.x + offset.x * scaleX, base.y - offset.y * scaleY};
++    };
++    return {place({0.f, 0.f}, corners.leftTop), place({width, 0.f}, corners.rightTop),
++            place({width, height}, corners.rightBottom), place({0.f, height}, corners.leftBottom)};
++}
++
++double cross(Point origin, Point a, Point b) {
++    return static_cast<double>(a.x - origin.x) * (b.y - origin.y) -
++            static_cast<double>(a.y - origin.y) * (b.x - origin.x);
++}
++
++// Convexo e sem cantos colapsados, em qualquer orientação (o espelho inverte o sentido).
++bool isConvex(const std::array<Point, 4>& quad) {
++    int positive = 0;
++    int negative = 0;
++    for (size_t i = 0; i < quad.size(); ++i) {
++        const double turn = cross(quad[i], quad[(i + 1) % 4], quad[(i + 2) % 4]);
++        positive += turn > kEpsilon;
++        negative += turn < -kEpsilon;
++    }
++    return positive == 4 || negative == 4;
++}
++
++// Quadrado unitário (0,0) (1,0) (1,1) (0,1) para o quadrilátero, forma fechada de Heckbert
++// ("Fundamentals of Texture Mapping and Image Warping", 1989).
++std::optional<std::array<double, 9>> mapUnitSquareTo(const std::array<Point, 4>& quad) {
++    const double x0 = quad[0].x, y0 = quad[0].y, x1 = quad[1].x, y1 = quad[1].y;
++    const double x2 = quad[2].x, y2 = quad[2].y, x3 = quad[3].x, y3 = quad[3].y;
++    const double dx1 = x1 - x2, dx2 = x3 - x2, dx3 = x0 - x1 + x2 - x3;
++    const double dy1 = y1 - y2, dy2 = y3 - y2, dy3 = y0 - y1 + y2 - y3;
++    const double det = dx1 * dy2 - dx2 * dy1;
++    if (std::fabs(det) < kEpsilon) {
++        return std::nullopt;
++    }
++    const double g = (dx3 * dy2 - dx2 * dy3) / det;
++    const double h = (dx1 * dy3 - dx3 * dy1) / det;
++    return std::array<double, 9>{x1 - x0 + g * x1, x3 - x0 + h * x3, x0,
++                                 y1 - y0 + g * y1, y3 - y0 + h * y3, y0,
++                                 g,                h,                1.0};
++}
++
++std::array<double, 9> multiply(const std::array<double, 9>& a, const std::array<double, 9>& b) {
++    std::array<double, 9> result{};
++    for (size_t row = 0; row < 3; ++row) {
++        for (size_t column = 0; column < 3; ++column) {
++            for (size_t k = 0; k < 3; ++k) {
++                result[row * 3 + column] += a[row * 3 + k] * b[k * 3 + column];
++            }
++        }
++    }
++    return result;
++}
++
++// Do display (px) para o quadrado unitário, com os espelhos nativos da fábrica
++// (persist.sys.keystone.mirror_x/mirror_y) aplicados antes.
++std::array<double, 9> buildSourceToUnit(const Config& config, float width, float height) {
++    const double scaleX = (config.mirrorX ? -1.0 : 1.0) / width;
++    const double scaleY = (config.mirrorY ? -1.0 : 1.0) / height;
++    return {scaleX, 0.0, config.mirrorX ? 1.0 : 0.0,
++            0.0, scaleY, config.mirrorY ? 1.0 : 0.0,
++            0.0, 0.0, 1.0};
++}
++
++Matrix3 toFloat(const std::array<double, 9>& matrix) {
++    const double scale = matrix[8];
++    Matrix3 result{};
++    for (size_t i = 0; i < matrix.size(); ++i) {
++        result[i] = static_cast<float>(matrix[i] / scale);
++    }
++    return result;
++}
++
++} // namespace
++
++std::optional<Point> parseCorner(std::string_view text) {
++    const auto comma = text.find(',');
++    if (comma == std::string_view::npos) {
++        return std::nullopt;
++    }
++    const auto x = parseNumber(text.substr(0, comma));
++    const auto y = parseNumber(text.substr(comma + 1));
++    if (!x || !y) {
++        return std::nullopt;
++    }
++    return Point{*x, *y};
++}
++
++bool parseFlag(std::string_view text) {
++    const std::string_view value = trim(text);
++    return value == "1" || value == "true";
++}
++
++std::optional<Matrix3> buildKeystoneMatrix(const Config& config, float width, float height) {
++    const bool hasWork = hasOffset(config.corners) || config.mirrorX || config.mirrorY;
++    if (config.disabled || !hasWork || width <= 0.f || height <= 0.f) {
++        return std::nullopt;
++    }
++    const auto destination = buildDestination(config.corners, width, height);
++    if (!isConvex(destination)) {
++        return std::nullopt;
++    }
++    const auto unitToDestination = mapUnitSquareTo(destination);
++    if (!unitToDestination) {
++        return std::nullopt;
++    }
++    return toFloat(multiply(*unitToDestination, buildSourceToUnit(config, width, height)));
++}
++
++Point mapPoint(const Matrix3& m, Point p) {
++    const float w = m[6] * p.x + m[7] * p.y + m[8];
++    return {(m[0] * p.x + m[1] * p.y + m[2]) / w, (m[3] * p.x + m[4] * p.y + m[5]) / w};
++}
++
++std::array<float, 16> toColumnMajor4x4(const Matrix3& m) {
++    return {m[0], m[3], 0.f, m[6],  //
++            m[1], m[4], 0.f, m[7],  //
++            0.f,  0.f,  1.f, 0.f,   //
++            m[2], m[5], 0.f, m[8]};
++}
++
++} // namespace android::surfaceflinger::keystone
+diff --git a/services/surfaceflinger/Keystone/KeystoneMath.h b/services/surfaceflinger/Keystone/KeystoneMath.h
+new file mode 100644
+index 0000000..28d98c5
+--- /dev/null
++++ b/services/surfaceflinger/Keystone/KeystoneMath.h
+@@ -0,0 +1,64 @@
++/*
++ * SPDX-FileCopyrightText: 2026 Mateus Seiboth
++ * SPDX-License-Identifier: Apache-2.0
++ */
++
++#pragma once
++
++#include <array>
++#include <optional>
++#include <string_view>
++
++// Correção de trapézio (keystone) do projetor HY300: a imagem inteira do display é levada para
++// o quadrilátero dado pelos 4 cantos, por uma homografia aplicada na composição final.
++//
++// Contrato herdado da fábrica (SurfaceFlinger da Rockchip + librkgfx_dc) e mantido pelo app de
++// configurações: persist.sys.keystone.{lt,lb,rt,rb} = "x,y", deslocamento de cada canto em px de
++// uma tela lógica de 1280x720, x para a direita e y para cima. O valor é convertido para o
++// tamanho real do display (1024x600 no HY300).
++//
++// Só código C++ padrão, para os testes rodarem no host.
++namespace android::surfaceflinger::keystone {
++
++constexpr float kLogicalWidth = 1280.f;
++constexpr float kLogicalHeight = 720.f;
++
++struct Point {
++    float x = 0.f;
++    float y = 0.f;
++};
++
++struct Corners {
++    Point leftTop;
++    Point leftBottom;
++    Point rightTop;
++    Point rightBottom;
++};
++
++struct Config {
++    Corners corners;
++    bool mirrorX = false;
++    bool mirrorY = false;
++    bool disabled = false;
++};
++
++// 3x3 em ordem de linha: leva (x, y, 1) da imagem composta para o display.
++using Matrix3 = std::array<float, 9>;
++
++// "x,y" com inteiros ou decimais e espaços em volta. Qualquer outra coisa é nullopt.
++std::optional<Point> parseCorner(std::string_view text);
++
++// "1" ou "true" liga; o resto desliga.
++bool parseFlag(std::string_view text);
++
++// Homografia para um display de width x height px. nullopt quando não há o que corrigir
++// (cantos zerados sem espelho, desligado) ou quando os cantos não formam um quadrilátero convexo.
++std::optional<Matrix3> buildKeystoneMatrix(const Config& config, float width, float height);
++
++Point mapPoint(const Matrix3& matrix, Point point);
++
++// Para o android::mat4 (ordem de coluna) do RenderEngine: a perspectiva fica na linha w, que é
++// a que o SkM44::asM33() aproveita junto com x e y.
++std::array<float, 16> toColumnMajor4x4(const Matrix3& matrix);
++
++} // namespace android::surfaceflinger::keystone
+diff --git a/services/surfaceflinger/Keystone/tests/KeystoneMathTest.cpp b/services/surfaceflinger/Keystone/tests/KeystoneMathTest.cpp
+new file mode 100644
+index 0000000..9168b30
+--- /dev/null
++++ b/services/surfaceflinger/Keystone/tests/KeystoneMathTest.cpp
+@@ -0,0 +1,185 @@
++/*
++ * SPDX-FileCopyrightText: 2026 Mateus Seiboth
++ * SPDX-License-Identifier: Apache-2.0
++ *
++ * Testes da correção de trapézio (keystone) do HY300. Rodam no host:
++ *   clang++ -std=c++20 KeystoneMath.cpp tests/KeystoneMathTest.cpp -lgtest -lgtest_main
++ */
++
++#include "../KeystoneMath.h"
++
++#include <gtest/gtest.h>
++
++#include <cmath>
++
++namespace android::surfaceflinger::keystone {
++namespace {
++
++constexpr float kWidth = 1024.f;
++constexpr float kHeight = 600.f;
++constexpr float kTolerance = 1e-3f;
++
++void expectPointNear(const Point& expected, const Point& actual) {
++    EXPECT_NEAR(expected.x, actual.x, kTolerance);
++    EXPECT_NEAR(expected.y, actual.y, kTolerance);
++}
++
++TEST(KeystoneParseCornerTest, readsIntegerPair) {
++    const auto corner = parseCorner("20,-11");
++    ASSERT_TRUE(corner.has_value());
++    expectPointNear({20.f, -11.f}, *corner);
++}
++
++TEST(KeystoneParseCornerTest, acceptsSpacesAndDecimals) {
++    const auto corner = parseCorner(" 1.5 , -2.25 ");
++    ASSERT_TRUE(corner.has_value());
++    expectPointNear({1.5f, -2.25f}, *corner);
++}
++
++TEST(KeystoneParseCornerTest, rejectsMalformedText) {
++    EXPECT_FALSE(parseCorner("").has_value());
++    EXPECT_FALSE(parseCorner("10").has_value());
++    EXPECT_FALSE(parseCorner("a,b").has_value());
++    EXPECT_FALSE(parseCorner("1,2,3").has_value());
++    EXPECT_FALSE(parseCorner("nan,0").has_value());
++    EXPECT_FALSE(parseCorner("inf,0").has_value());
++}
++
++TEST(KeystoneParseFlagTest, onlyOneAndTrueTurnOn) {
++    EXPECT_TRUE(parseFlag("1"));
++    EXPECT_TRUE(parseFlag("true"));
++    EXPECT_FALSE(parseFlag("0"));
++    EXPECT_FALSE(parseFlag(""));
++    EXPECT_FALSE(parseFlag("false"));
++}
++
++TEST(KeystoneBuildMatrixTest, zeroCornersMeanNoKeystone) {
++    EXPECT_FALSE(buildKeystoneMatrix(Config{}, kWidth, kHeight).has_value());
++}
++
++TEST(KeystoneBuildMatrixTest, disabledMeansNoKeystone) {
++    Config config;
++    config.corners.leftTop = {20.f, -20.f};
++    config.disabled = true;
++    EXPECT_FALSE(buildKeystoneMatrix(config, kWidth, kHeight).has_value());
++}
++
++TEST(KeystoneBuildMatrixTest, invalidDisplaySizeMeansNoKeystone) {
++    Config config;
++    config.corners.leftTop = {20.f, -20.f};
++    EXPECT_FALSE(buildKeystoneMatrix(config, 0.f, kHeight).has_value());
++}
++
++// Zoom de 90 % do app: lt 64,-36 lb 64,36 rt -64,-36 rb -64,36 (px de 1280x720, y para cima).
++// No painel de 1024x600 isso é a imagem inteira reduzida a 90 % e centrada.
++TEST(KeystoneBuildMatrixTest, zoomOfTheAppScalesAroundTheCenter) {
++    Config config;
++    config.corners = {{64.f, -36.f}, {64.f, 36.f}, {-64.f, -36.f}, {-64.f, 36.f}};
++    const auto matrix = buildKeystoneMatrix(config, kWidth, kHeight);
++    ASSERT_TRUE(matrix.has_value());
++
++    expectPointNear({51.2f, 30.f}, mapPoint(*matrix, {0.f, 0.f}));
++    expectPointNear({972.8f, 570.f}, mapPoint(*matrix, {kWidth, kHeight}));
++    expectPointNear({kWidth / 2, kHeight / 2}, mapPoint(*matrix, {kWidth / 2, kHeight / 2}));
++    EXPECT_NEAR(0.f, (*matrix)[6], kTolerance);
++    EXPECT_NEAR(0.f, (*matrix)[7], kTolerance);
++}
++
++// Trapézio do app (mesa frontal, estreitar o topo em 20): lt 20,-20 e rt -20,-20.
++TEST(KeystoneBuildMatrixTest, narrowTopMapsEachCornerToItsOffset) {
++    Config config;
++    config.corners.leftTop = {20.f, -20.f};
++    config.corners.rightTop = {-20.f, -20.f};
++    const auto matrix = buildKeystoneMatrix(config, kWidth, kHeight);
++    ASSERT_TRUE(matrix.has_value());
++
++    const float dx = 20.f * kWidth / kLogicalWidth;
++    const float dy = 20.f * kHeight / kLogicalHeight;
++    expectPointNear({dx, dy}, mapPoint(*matrix, {0.f, 0.f}));
++    expectPointNear({kWidth - dx, dy}, mapPoint(*matrix, {kWidth, 0.f}));
++    expectPointNear({0.f, kHeight}, mapPoint(*matrix, {0.f, kHeight}));
++    expectPointNear({kWidth, kHeight}, mapPoint(*matrix, {kWidth, kHeight}));
++}
++
++// Um trapézio é projetivo: o centro da imagem vai para o cruzamento das diagonais, mais perto da
++// borda estreita (y = altura * topo / (topo + base)), e não para o meio da altura como numa
++// malha bilinear.
++TEST(KeystoneBuildMatrixTest, trapezoidIsProjectiveNotBilinear) {
++    Config config;
++    config.corners.leftTop = {200.f, 0.f};
++    config.corners.rightTop = {-200.f, 0.f};
++    const auto matrix = buildKeystoneMatrix(config, kWidth, kHeight);
++    ASSERT_TRUE(matrix.has_value());
++
++    EXPECT_GT(std::fabs((*matrix)[7]), 1e-6f);
++    const float top = kWidth - 2 * 200.f * kWidth / kLogicalWidth;
++    const Point middle = mapPoint(*matrix, {kWidth / 2, kHeight / 2});
++    EXPECT_NEAR(kWidth / 2, middle.x, kTolerance);
++    EXPECT_NEAR(kHeight * top / (top + kWidth), middle.y, kTolerance);
++}
++
++// Mesa traseira do app (espelho horizontal): lt=1280,0 lb=1280,0 rt=-1280,0 rb=-1280,0.
++TEST(KeystoneBuildMatrixTest, rearTableModeMirrorsHorizontally) {
++    Config config;
++    config.corners = {{1280.f, 0.f}, {1280.f, 0.f}, {-1280.f, 0.f}, {-1280.f, 0.f}};
++    const auto matrix = buildKeystoneMatrix(config, kWidth, kHeight);
++    ASSERT_TRUE(matrix.has_value());
++
++    expectPointNear({kWidth, 0.f}, mapPoint(*matrix, {0.f, 0.f}));
++    expectPointNear({0.f, kHeight}, mapPoint(*matrix, {kWidth, kHeight}));
++    expectPointNear({kWidth - 100.f, 50.f}, mapPoint(*matrix, {100.f, 50.f}));
++}
++
++// Teto frontal do app (180 graus): lt 1280,-720 lb 1280,720 rt -1280,-720 rb -1280,720.
++TEST(KeystoneBuildMatrixTest, ceilingFrontModeRotates180Degrees) {
++    Config config;
++    config.corners = {{1280.f, -720.f}, {1280.f, 720.f}, {-1280.f, -720.f}, {-1280.f, 720.f}};
++    const auto matrix = buildKeystoneMatrix(config, kWidth, kHeight);
++    ASSERT_TRUE(matrix.has_value());
++
++    expectPointNear({kWidth - 100.f, kHeight - 50.f}, mapPoint(*matrix, {100.f, 50.f}));
++}
++
++TEST(KeystoneBuildMatrixTest, mirrorXFlagFlipsTheImage) {
++    Config config;
++    config.mirrorX = true;
++    const auto matrix = buildKeystoneMatrix(config, kWidth, kHeight);
++    ASSERT_TRUE(matrix.has_value());
++
++    expectPointNear({kWidth - 100.f, 50.f}, mapPoint(*matrix, {100.f, 50.f}));
++}
++
++TEST(KeystoneBuildMatrixTest, mirrorYFlagFlipsTheImage) {
++    Config config;
++    config.mirrorY = true;
++    const auto matrix = buildKeystoneMatrix(config, kWidth, kHeight);
++    ASSERT_TRUE(matrix.has_value());
++
++    expectPointNear({100.f, kHeight - 50.f}, mapPoint(*matrix, {100.f, 50.f}));
++}
++
++// Cantos cruzados (quadrilátero em "laço") não têm homografia útil: fica sem keystone.
++TEST(KeystoneBuildMatrixTest, crossedCornersAreRejected) {
++    Config config;
++    config.corners.leftTop = {1280.f, 0.f};
++    EXPECT_FALSE(buildKeystoneMatrix(config, kWidth, kHeight).has_value());
++}
++
++TEST(KeystoneBuildMatrixTest, collapsedCornersAreRejected) {
++    Config config;
++    config.corners = {{640.f, -360.f}, {640.f, 360.f}, {-640.f, -360.f}, {-640.f, 360.f}};
++    EXPECT_FALSE(buildKeystoneMatrix(config, kWidth, kHeight).has_value());
++}
++
++TEST(KeystoneColumnMajorTest, keepsThePerspectiveRowForTheRenderEngine) {
++    const Matrix3 matrix = {1.f, 2.f, 3.f, 4.f, 5.f, 6.f, 7.f, 8.f, 9.f};
++    const auto columns = toColumnMajor4x4(matrix);
++    const std::array<float, 16> expected = {1.f, 4.f, 0.f, 7.f,  //
++                                            2.f, 5.f, 0.f, 8.f,  //
++                                            0.f, 0.f, 1.f, 0.f,  //
++                                            3.f, 6.f, 0.f, 9.f};
++    EXPECT_EQ(expected, columns);
++}
++
++} // namespace
++} // namespace android::surfaceflinger::keystone
+diff --git a/services/surfaceflinger/SurfaceFlinger.cpp b/services/surfaceflinger/SurfaceFlinger.cpp
+index 9128394..98a03bf 100644
+--- a/services/surfaceflinger/SurfaceFlinger.cpp
++++ b/services/surfaceflinger/SurfaceFlinger.cpp
+@@ -1033,6 +1033,11 @@ void SurfaceFlinger::init() FTL_FAKE_GUARD(kMainThreadContext) {
+     // by initializing the Scheduler after configureLocked, once decoupled from DisplayDevice.
+     initScheduler(display);
+ 
++    // HY300: keystone correction read from persist.sys.keystone.*; each change asks for a new
++    // frame, even with a still screen.
++    mKeystone = std::make_unique<surfaceflinger::keystone::KeystoneController>(
++            [this] { scheduleRepaint(); });
++
+     // Start listening after creating the Scheduler, since the listener calls into it.
+     mDisplayModeController.setActiveModeListener(
+             display::DisplayModeController::ActiveModeListener::make(
+@@ -3378,6 +3383,7 @@ CompositeResultsPerDisplay SurfaceFlinger::composite(
+     }
+ 
+     setForcedClientCompositionLayerStacks(refreshArgs);
++    applyKeystone(pacesetterId, refreshArgs);
+ 
+     // TODO(b/255601557) Update frameInterval per display
+     refreshArgs.frameInterval =
+@@ -3680,6 +3686,22 @@ void SurfaceFlinger::prepareLayersForComposition(
+     }
+ }
+ 
++void SurfaceFlinger::applyKeystone(PhysicalDisplayId displayId,
++                                   compositionengine::CompositionRefreshArgs& refreshArgs) {
++    if (!mKeystone) {
++        return;
++    }
++    const auto display = FTL_FAKE_GUARD(mStateLock, getDisplayDeviceLocked(displayId));
++    if (!display) {
++        return;
++    }
++    const Rect bounds =
++            display->getCompositionDisplay()->getState().framebufferSpace.getBoundsAsRect();
++    if (const auto transform = mKeystone->getTransform(bounds.getWidth(), bounds.getHeight())) {
++        refreshArgs.keystone = {display->getId(), *transform};
++    }
++}
++
+ void SurfaceFlinger::setForcedClientCompositionLayerStacks(
+         compositionengine::CompositionRefreshArgs& refreshArgs) {
+     bool forceAllDisplaysToClientComposition = false;
+@@ -7253,6 +7275,9 @@ void SurfaceFlinger::dumpAll(const DumpArgs& args, const std::string& compositio
+     colorizer.reset(result);
+     dumpDisplays(result);
+     dumpCompositionDisplays(result);
++    if (mKeystone) {
++        mKeystone->dump(result);
++    }
+     result.push_back('\n');
+ 
+     mCompositionEngine->dump(result);
+diff --git a/services/surfaceflinger/SurfaceFlinger.h b/services/surfaceflinger/SurfaceFlinger.h
+index 9d8ef03..602d696 100644
+--- a/services/surfaceflinger/SurfaceFlinger.h
++++ b/services/surfaceflinger/SurfaceFlinger.h
+@@ -91,6 +91,7 @@
+ #include "FrontEnd/LayerSnapshot.h"
+ #include "FrontEnd/LayerSnapshotBuilder.h"
+ #include "FrontEnd/TransactionHandler.h"
++#include "Keystone/KeystoneController.h"
+ #include "MutexUtils.h"
+ #include "PowerAdvisor/PowerAdvisor.h"
+ #include "QueuedTransactionState.h"
+@@ -1602,6 +1603,7 @@ private:
+     // Dedicated composition engine instance for the virtual displays offloaded from main thread.
+     std::unique_ptr<compositionengine::CompositionEngine> mOffloadedCompositionEngine;
+     std::unique_ptr<HWComposer> mHWComposer;
++    std::unique_ptr<surfaceflinger::keystone::KeystoneController> mKeystone;
+ 
+     CompositionCoveragePerDisplay mCompositionCoverage;
+ 
+@@ -1781,6 +1783,8 @@ private:
+     void setVisibleRegionDirtyIfNeeded(compositionengine::CompositionRefreshArgs& refreshArgs);
+ 
+     void setForcedClientCompositionLayerStacks(compositionengine::CompositionRefreshArgs&);
++    // HY300: keystone (persist.sys.keystone.*) of the pacesetter display.
++    void applyKeystone(PhysicalDisplayId, compositionengine::CompositionRefreshArgs&);
+ };
+ 
+ class SurfaceComposerAIDL : public gui::BnSurfaceComposer {

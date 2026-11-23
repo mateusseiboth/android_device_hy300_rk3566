@@ -1,0 +1,6 @@
+# Sensores, Bluetooth e entrada HDMI.
+ro.vendor.hy300.            u:object_r:vendor_hy300_hw_prop:s0
+vendor.ser.bt-uart          u:object_r:vendor_hy300_hw_prop:s0 exact string
+
+# Wi-Fi: resultado da carga dos módulos.
+vendor.hy300.wifi.          u:object_r:vendor_hy300_wifi_prop:s0

@@ -1,0 +1,14 @@
+# hy300-wifi-modules (configs/init): carrega o aic8800_bsp/fdrv/btlpm do /vendor, espera a
+# interface e grava vendor.hy300.wifi.iface.
+type hy300_wifi_modules, domain;
+type hy300_wifi_modules_exec, exec_type, vendor_file_type, file_type;
+init_daemon_domain(hy300_wifi_modules)
+
+allow hy300_wifi_modules vendor_shell_exec:file rx_file_perms;
+allow hy300_wifi_modules vendor_toolbox_exec:file rx_file_perms;
+allow hy300_wifi_modules vendor_configs_file:file r_file_perms;
+allow hy300_wifi_modules self:capability sys_module;
+allow hy300_wifi_modules vendor_kernel_modules:system module_load;
+r_dir_file(hy300_wifi_modules, vendor_kernel_modules)
+r_dir_file(hy300_wifi_modules, sysfs_net)
+set_prop(hy300_wifi_modules, vendor_hy300_wifi_prop)

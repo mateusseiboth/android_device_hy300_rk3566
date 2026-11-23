@@ -208,8 +208,9 @@ class FocusMotorAccessTest(unittest.TestCase):
         for attr in ("motor", "hd_camera_on"):
             self.assertIn(f"genfscon sysfs /devices/platform/focus-motor/motor_cc/motor_cc/{attr} "
                           "u:object_r:sysfs_hy300_motor:s0", genfs)
-        self.assertRegex(read(os.path.join(sep, "platform_app.te")),
-                         r"allow platform_app sysfs_hy300_motor:file rw_file_perms;")
+        # O app tem domínio próprio desde a sepolicy da rodada 8 (hy300_settings_app).
+        self.assertRegex(read(os.path.join(sep, "hy300_settings_app.te")),
+                         r"allow hy300_settings_app sysfs_hy300_motor:file rw_file_perms;")
         self.assertIn("BOARD_VENDOR_SEPOLICY_DIRS += $(DEVICE_PATH)/sepolicy/vendor",
                       read(os.path.join(TREE, "BoardConfig.mk")))
 

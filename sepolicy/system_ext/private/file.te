@@ -1,0 +1,2 @@
+# /dev/hy300-bootlog: marca do 1º quadro da animação de boot (criado pelo init no early-init).
+type hy300_bootlog_dev_file, dev_type;

@@ -251,3 +251,58 @@ endif
 ifneq ($(wildcard $(DEVICE_PATH)/prebuilt/aurora/AuroraStore.apk),)
 PRODUCT_PACKAGES += AuroraStore
 endif
+
+# Keystone no SurfaceFlinger (patches/frameworks/native/0001): mesma API de props da fábrica
+# (persist.sys.keystone.*), aplicada pelo RenderEngine na composição pelo cliente. O .rc dá o
+# gatilho de releitura quando as props persist carregam.
+PRODUCT_COPY_FILES += \
+    $(DEVICE_PATH)/configs/init/hy300-keystone.rc:$(TARGET_COPY_OUT_SYSTEM_EXT)/etc/init/hy300-keystone.rc
+
+# Sensores: HAL AIDL próprio (sensors/) com o acelerômetro do keystone automático do app. O
+# backend e o dispositivo vêm das props abaixo; o padrão é o SC7A20 pelo framework "gsensor"
+# do kernel Rockchip (GS_SC7A20). Para um driver IIO: backend=iio e device=<nome do IIO>.
+PRODUCT_PACKAGES += android.hardware.sensors-service.hy300
+PRODUCT_COPY_FILES += \
+    frameworks/native/data/etc/android.hardware.sensor.accelerometer.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.hardware.sensor.accelerometer.xml
+PRODUCT_VENDOR_PROPERTIES += \
+    ro.vendor.hy300.accel.backend=rk-gsensor \
+    ro.vendor.hy300.accel.device=gsensor \
+    ro.vendor.hy300.accel.control=/dev/mma8452_daemon \
+    ro.vendor.hy300.accel.axes=x,y,z
+
+# Bluetooth do AIC8800 (UART1 a 1,5 Mbaud), sem blobs: HAL AIDL padrão do AOSP e o
+# hy300-bt-uart (bluetooth/) para ligar os rfkill e ajustar a UART antes dele. O kernel
+# hy300-ack-6.1 cae418b6c490 entrega ttyS1 a 1,5 Mbaud com RTS/CTS, o patch do BT pelo
+# aic8800_bsp e os rfkill "bt_default" (rfkill-rk) e "bluetooth" (aic8800_btlpm.ko, que precisa
+# ser carregado depois do aic8800_bsp pelo hy300-wifi-modules). Ligado na imagem de teste
+# (rodada 8): se o HAL não achar o controlador, a pilha do Android fica reiniciando; aí
+# HY300_WITH_BLUETOOTH=false no ambiente do build desliga. A libbt-vendor da AICSemi não entra:
+# é para o HAL HIDL antigo, e o HAL AIDL fala H4 sozinho.
+# Modo "uart": o HAL fala H4 direto no tty (vendor.ser.bt-uart). Modo "hci": o kernel cria o
+# hci0 pela disciplina de linha e o HAL usa o canal de usuário do hci0.
+HY300_WITH_BLUETOOTH ?= true
+ifeq ($(HY300_WITH_BLUETOOTH),true)
+PRODUCT_PACKAGES += \
+    android.hardware.bluetooth-service.default \
+    hy300-bt-uart
+PRODUCT_COPY_FILES += \
+    frameworks/native/data/etc/android.hardware.bluetooth.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.hardware.bluetooth.xml \
+    frameworks/native/data/etc/android.hardware.bluetooth_le.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.hardware.bluetooth_le.xml
+PRODUCT_VENDOR_PROPERTIES += \
+    ro.vendor.hy300.bt.mode=uart \
+    ro.vendor.hy300.bt.tty=/dev/ttyS1 \
+    ro.vendor.hy300.bt.baud=1500000 \
+    ro.vendor.hy300.bt.flow=1 \
+    vendor.ser.bt-uart=/dev/ttyS1
+endif
+
+# Entrada HDMI (RK628 -> csi2-dphy0 -> rkisp-vir0): HAL de TV input próprio (tvinput/), que
+# acompanha cabo e resolução pelo subdev do RK628 e entrega o stream como sideband. O áudio da
+# placa "rockchiphdmiin" vai ao alto-falante pelo patch de software do audio policy (HDMI In em
+# configs/audio). A imagem depende de um consumidor do sideband no compositor, que ainda não
+# existe (ver docs/lineage-recursos.md no hy300-rk3566).
+PRODUCT_PACKAGES += android.hardware.tv.input-service.hy300
+PRODUCT_VENDOR_PROPERTIES += \
+    ro.vendor.hy300.hdmiin.video=rkisp_mainpath \
+    ro.vendor.hy300.hdmiin.subdev=rk628 \
+    ro.vendor.hy300.hdmiin.audio_address=CARD_1_DEV_0

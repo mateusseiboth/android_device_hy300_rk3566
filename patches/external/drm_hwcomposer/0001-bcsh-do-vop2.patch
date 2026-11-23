@@ -1,0 +1,490 @@
+HY300: brilho, contraste, saturação e matiz pelo bloco BCSH do VOP2.
+
+O kernel BSP da Rockchip põe "brightness", "contrast", "saturation" e "hue" (0 a 100) em todo
+conector; o drm_hwcomposer passa a gravá-las em cada commit do display principal a partir de
+persist.sys.hy300.picture.<item>, que o app de configurações grava (o equivalente das
+persist.vendor.<item>.main do HWC da Rockchip, que o sistema não pode gravar no Treble).
+
+diff --git a/Android.bp b/Android.bp
+index 4183e34..dd0adb2 100644
+--- a/Android.bp
++++ b/Android.bp
+@@ -136,6 +136,8 @@ filegroup {
+         "stats/StatsPoller.cpp",
+ 
+         "utils/BacklightController.cpp",
++        "utils/Bcsh.cpp",
++        "utils/BcshProperties.cpp",
+         "utils/ColorUtil.cpp",
+         "utils/LibdisplayEdidWrapper.cpp",
+         "utils/SysfsBacklightController.cpp",
+@@ -341,6 +343,8 @@ cc_test_host {
+         "tests/host_test_stubs.cpp",
+         "utils/BacklightController.cpp",
+         "utils/BacklightControllerTest.cpp",
++        "utils/Bcsh.cpp",
++        "utils/BcshTest.cpp",
+         "utils/SysfsBacklightController.cpp",
+         "utils/SysfsBacklightControllerTest.cpp",
+         "utils/fd.cpp",
+diff --git a/drm/DrmAtomicCommitSink.h b/drm/DrmAtomicCommitSink.h
+index 87710ee..fa3e02d 100644
+--- a/drm/DrmAtomicCommitSink.h
++++ b/drm/DrmAtomicCommitSink.h
+@@ -26,6 +26,7 @@
+ #include "drm/DrmMode.h"
+ #include "drm/drm_mode.h"
+ #include "hwc/HwcDisplay.h"
++#include "utils/Bcsh.h"
+ #include "utils/fd.h"
+ 
+ namespace android::drm_hwcomposer {
+@@ -56,6 +57,8 @@ struct AtomicCommitArgs {
+   std::optional<HdcpContentType> hdcp_content_type;
+   std::optional<ContentProtection> content_protection;
+   std::optional<int32_t> min_bpc;
++  // HY300: BCSH of the Rockchip VOP2 (connector properties of the BSP kernel)
++  std::optional<Bcsh> bcsh;
+ 
+   std::shared_ptr<IDrmFbIdHandle> writeback_fb;
+   SharedFd writeback_release_fence;
+diff --git a/drm/DrmAtomicStateManager.cpp b/drm/DrmAtomicStateManager.cpp
+index 99d646f..ff4cc22 100644
+--- a/drm/DrmAtomicStateManager.cpp
++++ b/drm/DrmAtomicStateManager.cpp
+@@ -430,6 +430,28 @@ bool DrmAtomicStateManager::SetMinBpcIfNeeded(const AtomicCommitArgs &args,
+                                                   min_bpc_val);
+ }
+ 
++// A connector without one of the properties just skips it: only the Rockchip
++// BSP kernel has them.
++bool DrmAtomicStateManager::SetBcshIfNeeded(const AtomicCommitArgs &args,
++                                            AtomicRequest &request) {
++  if (!args.bcsh) {
++    return true;
++  }
++  auto *connector = pipe_->connector->Get();
++  const std::pair<const DrmProperty &, uint64_t> items[] = {
++      {connector->GetBrightnessProperty(), args.bcsh->brightness},
++      {connector->GetContrastProperty(), args.bcsh->contrast},
++      {connector->GetSaturationProperty(), args.bcsh->saturation},
++      {connector->GetHueProperty(), args.bcsh->hue},
++  };
++  for (const auto &[property, value] : items) {
++    if (property && !property.AtomicSet(*request.property_set, value)) {
++      return false;
++    }
++  }
++  return true;
++}
++
+ bool DrmAtomicStateManager::SetCompositionIfNeeded(const AtomicCommitArgs &args,
+                                                    AtomicRequest &request) {
+   if (!args.composition) {
+@@ -583,6 +605,11 @@ DrmAtomicStateManager::GetAtomicModeReqForArgs(AtomicCommitArgs &args) {
+     ALOGE("Failed to set min BPC");
+     return nullptr;
+   }
++
++  if (!SetBcshIfNeeded(args, *atomic_request)) {
++    ALOGE("Failed to set BCSH");
++    return nullptr;
++  }
+   if (!SetCompositionIfNeeded(args, *atomic_request)) {
+     ALOGE("Failed to set composition");
+     return nullptr;
+diff --git a/drm/DrmAtomicStateManager.h b/drm/DrmAtomicStateManager.h
+index 4e1eb9e..62ea3e7 100644
+--- a/drm/DrmAtomicStateManager.h
++++ b/drm/DrmAtomicStateManager.h
+@@ -135,6 +135,7 @@ class DrmAtomicStateManager : public DrmAtomicCommitSink {
+   bool SetHdrMetadataIfNeeded(const AtomicCommitArgs &args,
+                               AtomicRequest &request);
+   bool SetMinBpcIfNeeded(const AtomicCommitArgs &args, AtomicRequest &request);
++  bool SetBcshIfNeeded(const AtomicCommitArgs &args, AtomicRequest &request);
+   bool SetCompositionIfNeeded(const AtomicCommitArgs &args,
+                               AtomicRequest &request);
+ 
+diff --git a/drm/DrmConnector.cpp b/drm/DrmConnector.cpp
+index d116991..e0ea362 100644
+--- a/drm/DrmConnector.cpp
++++ b/drm/DrmConnector.cpp
+@@ -165,6 +165,11 @@ auto DrmConnector::Init()-> bool {
+ 
+   GetOptionalConnectorProperty("min bpc", &min_bpc_property_);
+ 
++  GetOptionalConnectorProperty("brightness", &brightness_property_);
++  GetOptionalConnectorProperty("contrast", &contrast_property_);
++  GetOptionalConnectorProperty("saturation", &saturation_property_);
++  GetOptionalConnectorProperty("hue", &hue_property_);
++
+   if (GetOptionalConnectorProperty("panel orientation", &panel_orientation_)) {
+     panel_orientation_
+         .AddEnumToMapReverse("Normal",
+diff --git a/drm/DrmConnector.h b/drm/DrmConnector.h
+index 00d05b4..0ecdf4a 100644
+--- a/drm/DrmConnector.h
++++ b/drm/DrmConnector.h
+@@ -127,6 +127,24 @@ class DrmConnector : public PipelineBindable<DrmConnector> {
+     return hdcp_content_type_property_;
+   }
+ 
++  // BCSH ("brightness", "contrast", "saturation", "hue", 0 to 100) that the
++  // Rockchip BSP kernel attaches to every connector.
++  auto &GetBrightnessProperty() const {
++    return brightness_property_;
++  }
++
++  auto &GetContrastProperty() const {
++    return contrast_property_;
++  }
++
++  auto &GetSaturationProperty() const {
++    return saturation_property_;
++  }
++
++  auto &GetHueProperty() const {
++    return hue_property_;
++  }
++
+   auto &GetWritebackFbIdProperty() const {
+     return writeback_fb_id_property_;
+   }
+@@ -181,6 +199,10 @@ class DrmConnector : public PipelineBindable<DrmConnector> {
+   DrmProperty min_bpc_property_;
+   DrmProperty hdr_output_metadata_property_;
+   DrmProperty hdcp_content_type_property_;
++  DrmProperty brightness_property_;
++  DrmProperty contrast_property_;
++  DrmProperty saturation_property_;
++  DrmProperty hue_property_;
+ 
+   DrmProperty link_status_property_;
+   DrmProperty panel_orientation_;
+diff --git a/hwc/HwcDisplay.cpp b/hwc/HwcDisplay.cpp
+index 7f3b7ee..c811313 100644
+--- a/hwc/HwcDisplay.cpp
++++ b/hwc/HwcDisplay.cpp
+@@ -918,6 +918,7 @@ AtomicCommitArgs HwcDisplay::CreateModesetCommit(
+   args.transfer_func = transfer_func_;
+   args.hdr_metadata = hdr_metadata_;
+   args.min_bpc = min_bpc_;
++  args.bcsh = GetBcsh();
+ 
+   std::vector<LayerData> composition_layers;
+   if (modeset_layer) {
+@@ -1043,6 +1044,7 @@ std::optional<AtomicCommitArgs> HwcDisplay::CreateFrameUpdateCommit(
+   a_args.transfer_func = transfer_func_;
+   a_args.hdr_metadata = hdr_metadata_;
+   a_args.min_bpc = min_bpc_;
++  a_args.bcsh = GetBcsh();
+ 
+   if (staged_mode_config_id_ &&
+       staged_mode_change_time_ <= ResourceManager::GetTimeMonotonicNs()) {
+@@ -1263,6 +1265,16 @@ std::shared_ptr<BindingOwner<DrmPlane>> HwcDisplay::GetCursorPlane() const {
+   return pipeline_->GetUsablePlanes().second;
+ }
+ 
++std::optional<Bcsh> HwcDisplay::GetBcsh() const {
++  if (handle_ != kPrimaryDisplay) {
++    return std::nullopt;
++  }
++  if (!bcsh_source_) {
++    bcsh_source_ = BcshSource::FromSystemProperties();
++  }
++  return bcsh_source_->Get();
++}
++
+ bool HwcDisplay::CtmByGpu() const {
+   if (color_transform_is_identity_)
+     return false;
+diff --git a/hwc/HwcDisplay.h b/hwc/HwcDisplay.h
+index efbeb49..d7a6bea 100644
+--- a/hwc/HwcDisplay.h
++++ b/hwc/HwcDisplay.h
+@@ -26,6 +26,7 @@
+ #include "hwc/HwcDisplayConfigs.h"
+ #include "hwc/HwcLayer.h"
+ #include "utils/BacklightController.h"
++#include "utils/Bcsh.h"
+ #include "utils/EdidWrapper.h"
+ 
+ namespace aidl::android::hardware::graphics::common {
+@@ -315,6 +316,10 @@ class HwcDisplay : public ICompositorDisplay {
+       const HwcDisplayConfig *config,
+       const std::optional<LayerData> &modeset_layer);
+ 
++  // HY300: BCSH of the primary display (persist.sys.hy300.picture.<item>);
++  // nullopt on the other displays.
++  std::optional<Bcsh> GetBcsh() const;
++
+   std::optional<AtomicCommitResult> ExecuteAtomicCommit(
+       AtomicCommitArgs &a_args) const;
+ 
+@@ -380,6 +385,7 @@ class HwcDisplay : public ICompositorDisplay {
+   Colorspace colorspace_{};
+   TransferFunction transfer_func_{};
+   int32_t min_bpc_{};
++  mutable std::optional<BcshSource> bcsh_source_;
+   std::shared_ptr<hdr_output_metadata> hdr_metadata_;
+   // Most recent result of ValidateStagedComposition. Must be kept alive until
+   // the composition is committed.
+diff --git a/utils/Bcsh.cpp b/utils/Bcsh.cpp
+new file mode 100644
+index 0000000..445ab86
+--- /dev/null
++++ b/utils/Bcsh.cpp
+@@ -0,0 +1,57 @@
++/*
++ * SPDX-FileCopyrightText: 2026 Mateus Seiboth
++ * SPDX-License-Identifier: Apache-2.0
++ */
++
++#include "Bcsh.h"
++
++#include <algorithm>
++#include <charconv>
++#include <utility>
++
++namespace android::drm_hwcomposer {
++
++namespace {
++
++uint64_t ReadItem(const PropertyGetter &get, std::string_view item) {
++  std::string name = "persist.sys.hy300.picture.";
++  name.append(item);
++  return ParseBcshValue(get(name.c_str()));
++}
++
++}  // namespace
++
++uint64_t ParseBcshValue(std::string_view text) {
++  int64_t value = 0;
++  const char *end = text.data() + text.size();
++  const auto [ptr, error] = std::from_chars(text.data(), end, value);
++  if (text.empty() || error != std::errc() || ptr != end) {
++    return kBcshNeutral;
++  }
++  return static_cast<uint64_t>(
++      std::clamp<int64_t>(value, 0, static_cast<int64_t>(kBcshMax)));
++}
++
++Bcsh ReadBcsh(const PropertyGetter &get) {
++  Bcsh bcsh;
++  bcsh.brightness = ReadItem(get, "brightness");
++  bcsh.contrast = ReadItem(get, "contrast");
++  bcsh.saturation = ReadItem(get, "saturation");
++  bcsh.hue = ReadItem(get, "hue");
++  return bcsh;
++}
++
++BcshSource::BcshSource(PropertyGetter get, PropertySerial serial)
++    : get_(std::move(get)), serial_(std::move(serial)) {
++}
++
++Bcsh BcshSource::Get() {
++  const uint32_t serial = serial_();
++  if (last_serial_ != serial) {
++    last_ = ReadBcsh(get_);
++    last_serial_ = serial;
++  }
++  return last_;
++}
++
++}  // namespace android::drm_hwcomposer
+diff --git a/utils/Bcsh.h b/utils/Bcsh.h
+new file mode 100644
+index 0000000..bdaf81c
+--- /dev/null
++++ b/utils/Bcsh.h
+@@ -0,0 +1,69 @@
++/*
++ * SPDX-FileCopyrightText: 2026 Mateus Seiboth
++ * SPDX-License-Identifier: Apache-2.0
++ */
++
++#pragma once
++
++#include <cstdint>
++#include <functional>
++#include <optional>
++#include <string>
++#include <string_view>
++
++namespace android::drm_hwcomposer {
++
++// Brilho, contraste, saturação e matiz (BCSH) feitos pelo hardware de vídeo da Rockchip (bloco
++// BCSH do VOP2, depois da composição). O kernel BSP põe as propriedades "brightness",
++// "contrast", "saturation" e "hue" (0 a 100, neutro em 50) em todo conector. Valem para o
++// display principal e vêm de persist.sys.hy300.picture.<item>, na mesma escala das
++// persist.vendor.<item>.main do HWC da Rockchip. O nome é do sistema porque quem grava é o app de
++// configurações (sistema), e a sepolicy do Treble não deixa o sistema gravar props do vendor.
++constexpr uint64_t kBcshNeutral = 50;
++constexpr uint64_t kBcshMax = 100;
++
++struct Bcsh {
++  uint64_t brightness = kBcshNeutral;
++  uint64_t contrast = kBcshNeutral;
++  uint64_t saturation = kBcshNeutral;
++  uint64_t hue = kBcshNeutral;
++
++  bool operator==(const Bcsh &other) const {
++    return brightness == other.brightness && contrast == other.contrast &&
++           saturation == other.saturation && hue == other.hue;
++  }
++  bool operator!=(const Bcsh &other) const {
++    return !(*this == other);
++  }
++  bool IsNeutral() const {
++    return *this == Bcsh{};
++  }
++};
++
++using PropertyGetter = std::function<std::string(const char *name)>;
++using PropertySerial = std::function<uint32_t()>;
++
++// "0" a "100"; vazio ou inválido é o neutro, fora da faixa vai para o limite.
++uint64_t ParseBcshValue(std::string_view text);
++
++Bcsh ReadBcsh(const PropertyGetter &get);
++
++// Relê as props só quando alguma propriedade do sistema mudou (serial global da área de
++// propriedades), para custar quase nada a cada quadro.
++class BcshSource {
++ public:
++  BcshSource(PropertyGetter get, PropertySerial serial);
++
++  // Props reais do Android (property_get e __system_property_area_serial).
++  static BcshSource FromSystemProperties();
++
++  Bcsh Get();
++
++ private:
++  PropertyGetter get_;
++  PropertySerial serial_;
++  std::optional<uint32_t> last_serial_;
++  Bcsh last_{};
++};
++
++}  // namespace android::drm_hwcomposer
+diff --git a/utils/BcshProperties.cpp b/utils/BcshProperties.cpp
+new file mode 100644
+index 0000000..50ee7f8
+--- /dev/null
++++ b/utils/BcshProperties.cpp
+@@ -0,0 +1,22 @@
++/*
++ * SPDX-FileCopyrightText: 2026 Mateus Seiboth
++ * SPDX-License-Identifier: Apache-2.0
++ */
++
++#include <cutils/properties.h>
++#include <sys/system_properties.h>
++
++#include "Bcsh.h"
++
++namespace android::drm_hwcomposer {
++
++BcshSource BcshSource::FromSystemProperties() {
++  return {[](const char *name) {
++            char value[PROPERTY_VALUE_MAX] = {};
++            property_get(name, value, "");
++            return std::string(value);
++          },
++          [] { return __system_property_area_serial(); }};
++}
++
++}  // namespace android::drm_hwcomposer
+diff --git a/utils/BcshTest.cpp b/utils/BcshTest.cpp
+new file mode 100644
+index 0000000..e6a740a
+--- /dev/null
++++ b/utils/BcshTest.cpp
+@@ -0,0 +1,87 @@
++/*
++ * SPDX-FileCopyrightText: 2026 Mateus Seiboth
++ * SPDX-License-Identifier: Apache-2.0
++ */
++
++#include <gtest/gtest.h>
++
++#include <map>
++#include <string>
++
++#include "Bcsh.h"
++
++namespace android::drm_hwcomposer {
++namespace {
++
++class FakeProperties {
++ public:
++  std::string Get(const char *name) const {
++    ++reads;
++    const auto it = values.find(name);
++    return it == values.end() ? std::string() : it->second;
++  }
++
++  std::map<std::string, std::string> values;
++  uint32_t serial = 1;
++  mutable int reads = 0;
++};
++
++TEST(BcshParseValueTest, ReadsTheZeroToHundredScale) {
++  EXPECT_EQ(ParseBcshValue("0"), 0U);
++  EXPECT_EQ(ParseBcshValue("55"), 55U);
++  EXPECT_EQ(ParseBcshValue("100"), 100U);
++}
++
++TEST(BcshParseValueTest, EmptyOrInvalidIsNeutral) {
++  EXPECT_EQ(ParseBcshValue(""), kBcshNeutral);
++  EXPECT_EQ(ParseBcshValue("abc"), kBcshNeutral);
++  EXPECT_EQ(ParseBcshValue("5x"), kBcshNeutral);
++}
++
++TEST(BcshParseValueTest, OutOfRangeIsClamped) {
++  EXPECT_EQ(ParseBcshValue("-3"), 0U);
++  EXPECT_EQ(ParseBcshValue("250"), kBcshMax);
++}
++
++TEST(BcshReadTest, ReadsThePictureProps) {
++  FakeProperties props;
++  props.values = {{"persist.sys.hy300.picture.brightness", "60"},
++                  {"persist.sys.hy300.picture.contrast", "45"},
++                  {"persist.sys.hy300.picture.saturation", "70"},
++                  {"persist.sys.hy300.picture.hue", "52"}};
++  const Bcsh bcsh = ReadBcsh([&](const char *n) { return props.Get(n); });
++  EXPECT_EQ(bcsh, (Bcsh{60, 45, 70, 52}));
++}
++
++// As props do HWC da Rockchip não valem aqui: o app do sistema não pode gravá-las.
++TEST(BcshReadTest, IgnoresTheRockchipVendorProps) {
++  FakeProperties props;
++  props.values = {{"persist.vendor.brightness.main", "90"}};
++  EXPECT_TRUE(ReadBcsh([&](const char *n) { return props.Get(n); }).IsNeutral());
++}
++
++TEST(BcshReadTest, MissingPropsAreNeutral) {
++  FakeProperties props;
++  const Bcsh bcsh = ReadBcsh([&](const char *n) { return props.Get(n); });
++  EXPECT_EQ(bcsh, Bcsh{});
++  EXPECT_TRUE(bcsh.IsNeutral());
++}
++
++TEST(BcshSourceTest, RereadsOnlyWhenAPropertyChanged) {
++  FakeProperties props;
++  props.values["persist.sys.hy300.picture.contrast"] = "40";
++  BcshSource source([&](const char *n) { return props.Get(n); },
++                    [&] { return props.serial; });
++
++  EXPECT_EQ(source.Get().contrast, 40U);
++  const int reads = props.reads;
++  EXPECT_EQ(source.Get().contrast, 40U);
++  EXPECT_EQ(props.reads, reads);
++
++  props.values["persist.sys.hy300.picture.contrast"] = "65";
++  props.serial++;
++  EXPECT_EQ(source.Get().contrast, 65U);
++}
++
++}  // namespace
++}  // namespace android::drm_hwcomposer

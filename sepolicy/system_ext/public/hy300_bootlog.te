@@ -1,0 +1,2 @@
+# Animação de boot com log ao vivo (vendor/hy300/hy300-rk3566/android/bootlog).
+type hy300_bootlog, domain;

@@ -1,0 +1,47 @@
+//
+// SPDX-FileCopyrightText: 2026 Mateus Seiboth
+// SPDX-License-Identifier: Apache-2.0
+//
+// Bluetooth do AIC8800 sem blobs: o HAL é o AIDL padrão do AOSP; aqui só o preparo da UART.
+
+cc_defaults {
+    name: "hy300_bt_uart_defaults",
+    cflags: [
+        "-Wall",
+        "-Werror",
+        "-Wextra",
+        "-Wconversion",
+    ],
+    cpp_std: "c++20",
+}
+
+cc_library_static {
+    name: "libhy300btuart",
+    defaults: ["hy300_bt_uart_defaults"],
+    vendor_available: true,
+    host_supported: true,
+    srcs: ["BtUart.cpp"],
+    export_include_dirs: ["."],
+}
+
+cc_test {
+    name: "hy300-bt-uart-test",
+    defaults: ["hy300_bt_uart_defaults"],
+    host_supported: true,
+    srcs: ["tests/BtUartTest.cpp"],
+    static_libs: ["libhy300btuart"],
+    test_suites: ["general-tests"],
+}
+
+cc_binary {
+    name: "hy300-bt-uart",
+    defaults: ["hy300_bt_uart_defaults"],
+    vendor: true,
+    srcs: ["main.cpp"],
+    init_rc: ["hy300-bt-uart.rc"],
+    shared_libs: [
+        "libbase",
+        "liblog",
+    ],
+    static_libs: ["libhy300btuart"],
+}

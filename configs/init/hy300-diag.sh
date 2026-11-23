@@ -54,6 +54,8 @@ is_diag_enabled() {
 	userdebug | eng) ;;
 	*) return 1 ;;
 	esac
+	# Imagem de uso (androidboot.hy300.perfil=uso): nunca, nem com diag=1 ou o arquivo "ativo".
+	[ "$(getprop ro.boot.hy300.perfil)" = uso ] && return 1
 	[ "$(getprop ro.boot.hy300.diag)" = 1 ] && return 0
 	[ -e "$DIAG_ROOT/ativo" ]
 }

@@ -154,5 +154,37 @@ class MainTest(NetTestBase):
         self.assertTrue(os.path.exists(os.path.join(self.root, "wifi.conf")))
 
 
+class ProfileTest(NetTestBase):
+    """Imagem de uso (androidboot.hy300.perfil=uso): o adb pela rede não liga sozinho; o usuário
+    liga em Opções do desenvolvedor (depuração USB + ADB pela rede). Wi-Fi e chave do adb continuam
+    vindo do /metadata, se o Alpine os deixou lá."""
+
+    def set_profile(self, profile):
+        with open(self.props, "w") as f:
+            f.write(f"ro.build.type=userdebug\nsys.boot_completed=1\nro.boot.hy300.perfil={profile}\n")
+
+    def test_uso_does_not_enable_network_adb(self):
+        self.set_profile("uso")
+        self.run_main()
+        calls = self.calls_text()
+        self.assertNotIn("adb_enabled", calls)
+        self.assertNotIn("service.adb.tcp.port", calls)
+        self.assertNotIn("ctl.restart adbd", calls)
+
+    def test_uso_still_applies_wifi_and_adb_key(self):
+        self.set_profile("uso")
+        with open(os.path.join(self.root, "adb_keys"), "w") as f:
+            f.write("QAAAAexemplo= usuario@pc\n")
+        self.write_conf("WIFI_SSID=Casa\nWIFI_PSK=segredo\n")
+        self.run_main()
+        self.assertIn("[wifi][connect-network][Casa][wpa2][segredo]", self.calls_text())
+        self.assertTrue(os.path.exists(os.path.join(self.adb_dir, "adb_keys")))
+
+    def test_teste_profile_enables_network_adb(self):
+        self.set_profile("teste")
+        self.run_main()
+        self.assertIn("setprop service.adb.tcp.port 5555", self.calls_text())
+
+
 if __name__ == "__main__":
     unittest.main()

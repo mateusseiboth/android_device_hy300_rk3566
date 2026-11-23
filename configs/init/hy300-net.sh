@@ -13,7 +13,8 @@
 #   adb_keys: chave pública do PC (conteúdo de ~/.android/adbkey.pub)
 #
 # 1) adb pela rede: adb_enabled=1, service.adb.tcp.port=5555 e reinicia o adbd. A autenticação
-#    continua ligada; a chave do PC vai para /data/misc/adb/adb_keys (sem duplicar).
+#    continua ligada; a chave do PC vai para /data/misc/adb/adb_keys (sem duplicar). Na imagem de
+#    uso (androidboot.hy300.perfil=uso) só a chave é instalada; o adb fica desligado.
 # 2) Wi-Fi: `cmd wifi set-wifi-enabled enabled` e `cmd wifi connect-network`, que também salva a
 #    rede. IP por DHCP (o cmd wifi não tem opção de IP fixo). Depois apaga o wifi.conf.
 # Log em /metadata/hy300-diag/net.txt, nunca com a senha.
@@ -90,11 +91,21 @@ connect_wifi() {
 	log_net "cmd wifi: $(echo "$result" | head -n 1)"
 }
 
+# Imagem de uso (androidboot.hy300.perfil=uso): o adb não liga sozinho. O usuário liga em Opções
+# do desenvolvedor (depuração USB e ADB pela rede, do TvSettings).
+is_profile_uso() {
+	[ "$(getprop ro.boot.hy300.perfil)" = uso ]
+}
+
 main() {
 	is_userdebug || exit 0
 	mkdir -p "$NET_ROOT"
 	install_adb_key "$NET_ROOT/adb_keys"
-	enable_network_adb
+	if is_profile_uso; then
+		log_net "imagem de uso: adb pela rede fica desligado"
+	else
+		enable_network_adb
+	fi
 	if read_wifi_conf "$NET_ROOT/wifi.conf"; then
 		connect_wifi
 		rm -f "$NET_ROOT/wifi.conf"

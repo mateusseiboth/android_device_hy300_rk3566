@@ -119,6 +119,19 @@ service hy300-wifi-modules /vendor/bin/sh /vendor/bin/hy300-wifi-modules.sh
 on boot
     start hy300-wifi-modules
 
+# Ir ao Alpine e ficar nele pelo adb sem root (configs/init/hy300-alpine.sh): o shell pode setar
+# debug.*, e `adb shell setprop debug.hy300.alpine 1` grava a marca de ficar na misc e reinicia.
+# Só no userdebug e com o adbd no ar (na imagem de uso, só depois de o usuário ligar o adb).
+service hy300-alpine /system/bin/sh /vendor/bin/hy300-alpine.sh
+    user root
+    group root
+    seclabel u:r:su:s0
+    disabled
+    oneshot
+
+on property:debug.hy300.alpine=1 && property:ro.build.type=userdebug && property:init.svc.adbd=running
+    start hy300-alpine
+
 # Rede e adb pela rede no userdebug (configs/init/hy300-net.sh): chave do adb e Wi-Fi a partir do
 # que o Alpine deixou em /metadata/hy300-diag, depois do boot_completed.
 service hy300-net /system/bin/sh /vendor/bin/hy300-net.sh

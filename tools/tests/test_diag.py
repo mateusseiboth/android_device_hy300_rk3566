@@ -113,6 +113,14 @@ class EnabledTest(DiagTestBase):
                           "ro.boot.hy300.diag": "1"})
         self.assertEqual(self.run_lib("is_diag_enabled").returncode, 0)
 
+    def test_disabled_on_profile_uso_even_with_cmdline_flag(self):
+        # Imagem de uso (androidboot.hy300.perfil=uso): sem diag, mesmo com diag=1 ou o arquivo.
+        self.set_props(**{"ro.build.type": "userdebug", "ro.boot.hy300.diag": "1",
+                          "ro.boot.hy300.perfil": "uso"})
+        os.makedirs(self.root)
+        open(os.path.join(self.root, "ativo"), "w").close()
+        self.assertNotEqual(self.run_lib("is_diag_enabled").returncode, 0)
+
     def test_disabled_on_user_build_with_file(self):
         self.set_props(**{"ro.build.type": "user"})
         os.makedirs(self.root)

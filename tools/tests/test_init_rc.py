@@ -120,6 +120,24 @@ class InitRcTest(unittest.TestCase):
         self.assertEqual(props.get("ro.build.type"), "userdebug")
         self.assertTrue(self.services["hy300-net"]["command"].startswith("/system/bin/sh "))
 
+    def test_alpine_trigger_needs_userdebug_and_adbd(self):
+        # O shell do adb seta debug.hy300.alpine=1; na imagem de uso só funciona com o adb ligado.
+        actions = self.actions_starting("hy300-alpine")
+        self.assertEqual(len(actions), 1)
+        event, props = split_trigger(actions[0]["trigger"])
+        self.assertIsNone(event)
+        self.assertEqual(props, {"debug.hy300.alpine": "1", "ro.build.type": "userdebug",
+                                 "init.svc.adbd": "running"})
+        service = self.services["hy300-alpine"]
+        self.assertTrue(service["command"].startswith("/system/bin/sh /vendor/bin/hy300-alpine.sh"))
+        for line in ("disabled", "oneshot", "seclabel u:r:su:s0", "user root"):
+            self.assertIn(line, service["lines"])
+
+    def test_board_cmdline_is_the_test_profile(self):
+        # A imagem de uso é o mesmo build com androidboot.hy300.perfil=uso (lineage_prebuilt.py
+        # variant); a variant só troca chave que já existe na cmdline.
+        self.assertEqual(read_cmdline_props().get("ro.boot.hy300.perfil"), "teste")
+
     def test_wifi_modules_load_in_background_on_boot(self):
         actions = self.actions_starting("hy300-wifi-modules")
         self.assertEqual([split_trigger(a["trigger"])[0] for a in actions], ["boot"])

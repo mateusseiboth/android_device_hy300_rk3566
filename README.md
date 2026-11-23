@@ -100,6 +100,14 @@ fábrica).
   `docs/lineageos.md` do projeto) e liga o adb pela rede na porta 5555, com autenticação.
 - `tools/check_vintf_hals.py`: HALs obrigatórios e uma `interface` no init para cada HAL
   declarado.
+- **Perfil** (`androidboot.hy300.perfil` na cmdline): `teste` (padrão: diag e adb pela rede
+  ligados sozinhos) ou `uso` (sem diag; adb pela rede desligado até o usuário ligar em Opções do
+  desenvolvedor > Depuração USB e ADB pela rede). O `boot-uso.img` é o mesmo build com a chave
+  trocada por `tools/lineage_prebuilt.py variant` do projeto; a `super` é a mesma.
+- **Ir ao Alpine e ficar** sem adb root: `adb shell setprop debug.hy300.alpine 1`. O
+  `configs/init/hy300-alpine.sh` (root, só no userdebug e com o adbd no ar) grava a marca de ficar
+  na `misc` (0x10000) e faz reboot normal; se a área tiver outra coisa, não reinicia. Log em
+  `/metadata/hy300-diag/alpine.txt`.
 
 ## Desempenho e memória
 

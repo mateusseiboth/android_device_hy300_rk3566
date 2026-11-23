@@ -78,12 +78,17 @@ BOARD_KERNEL_CMDLINE += androidboot.selinux=permissive
 # sizeof); com panic o reboot é normal e o U-Boot sobe a boot (o Alpine).
 BOARD_KERNEL_CMDLINE += panic=5 androidboot.init_fatal_panic=true
 # Imagem de teste do primeiro boot: liga o hy300-diag (logs no /metadata e reinício normal aos
-# 8 min, de volta ao Alpine). Tirar quando o Lineage tiver rede.
+# 8 min, de volta ao Alpine, se o adb pela rede não subir). O perfil "uso" desliga.
 BOARD_KERNEL_CMDLINE += androidboot.hy300.diag=1
 # GPU: "panfrost" (Mesa). As travadas dos primeiros boots vinham de uma tempestade de IRQ do
 # GPIO da tecla Home no DT (corrigido no kernel 1ee24ab83ac1). O boot-sw.img troca para "sw"
 # (ANGLE + SwiftShader, sem panfrost.ko) como reserva (tools/lineage_prebuilt.py variant).
 BOARD_KERNEL_CMDLINE += androidboot.hy300.gpu=panfrost
+# Perfil: "teste" (diag ligado e adb pela rede ligado sozinho, como nas rodadas 1 a 6) ou "uso"
+# (sem diag; o adb pela rede fica desligado até o usuário ligar nas Opções do desenvolvedor). A
+# imagem de uso é o mesmo build com o boot.img trocado por tools/lineage_prebuilt.py variant
+# --set androidboot.hy300.perfil=uso (configs/init/hy300-diag.sh e hy300-net.sh leem a prop).
+BOARD_KERNEL_CMDLINE += androidboot.hy300.perfil=teste
 
 # Partições físicas (GPT de fábrica; o eMMC não é reparticionado).
 BOARD_FLASH_BLOCK_SIZE := 131072

@@ -152,10 +152,32 @@ instala aqui. `prebuilt/VERSION` guarda o commit e os sha256.
 | `resource.img` | seção `second` do `boot.img` de fábrica (logo + `rk-kernel.dtb` de fábrica) |
 | `modules/*.ko` | `drm_shmem_helper`, `gpu-sched`, `panfrost` |
 
-## O que falta (ordem em `docs/lineageos.md`)
+## Estado
 
-1. Primeiro boot no aparelho (pelo Alpine de recuperação).
-2. Wi-Fi AIC8800 no kernel Android, áudio, Bluetooth, sensores.
-3. Vídeo 10 bits e encoders no caminho do minigbm; sepolicy própria (hoje permissive).
-4. Keystone no SurfaceFlinger (mesmas props `persist.sys.keystone.*`), app de configurações
-   como app de plataforma, entrada HDMI (RK628).
+Só conta como visto no aparelho o que está nos logs dos boots 1 a 3 (detalhes em
+`docs/lineageos.md` do projeto).
+
+**Feito e visto no aparelho**
+
+- Primeiro boot pelo Alpine, com o ciclo do diag e a volta automática ao Alpine.
+- Kernel ACK com o DT corrigido, sem tempestade de IRQ.
+- Display e bootlog nativo.
+- GPU Panfrost sem erro.
+- Driver Wi-Fi AIC8800, com scan.
+- Shutdown e reboot.
+
+**Feito, sem verificação no aparelho**
+
+- App de configurações como priv-app com a chave de plataforma.
+- Vídeo por hardware (Codec2 + MPP).
+
+**Falta**
+
+- Boot completo: o HAL core de áudio trava o system_server (corrigido na rodada 5, a conferir).
+- Pilha Wi-Fi completa e adb pela rede (rodada 5, a conferir).
+- Bluetooth e sensores.
+- Widevine.
+- Vídeo 10 bits e encoders.
+- sepolicy própria (hoje permissive).
+- Keystone no SurfaceFlinger (mesmas props `persist.sys.keystone.*`).
+- Entrada HDMI (RK628, vídeo e áudio).

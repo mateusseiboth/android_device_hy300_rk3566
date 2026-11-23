@@ -210,22 +210,24 @@ Só conta como visto no aparelho o que está nos logs e medições dos boots 1 a
 
 - Rodada 6: encoders `c2.rk.*`, entrada por Surface, zram pelo `mmd` com writeback, diag mais
   leve, `TvProvision` no lugar do assistente, fuso, GApps e Aurora Store.
+- Rodada 7: perfil `uso`, gatilho `debug.hy300.alpine`, motor de foco com gid próprio e
+  `aic8800_btlpm`.
+- Rodadas 8 e 9 (branch `recursos`, compilada e integrada): keystone no SurfaceFlinger, BCSH,
+  sensores, Bluetooth (ligado: `HY300_WITH_BLUETOOTH ?= true`), entrada HDMI com imagem
+  (`hdmiin/` e `HY300HdmiInput`), 10 bits e sepolicy própria (o boot segue permissive).
 - Decodificação por hardware tocando vídeo de verdade (o componente sobe; falta tocar um vídeo).
 
 **Falta**
 
-- Bluetooth e sensores.
 - Widevine (os GApps não trazem DRM).
-- Vídeo 10 bits.
-- sepolicy própria (hoje permissive).
-- Keystone no SurfaceFlinger (mesmas props `persist.sys.keystone.*`).
-- Entrada HDMI (RK628, vídeo e áudio).
+- SELinux enforcing (depois de um boot permissive sem negações dos nossos domínios).
 
 ## Keystone, imagem, sensores, Bluetooth, entrada HDMI, 10 bits e sepolicy
 
 Descritos em `docs/lineage-recursos.md` do repositório do projeto (hy300-rk3566). Na árvore:
 `patches/frameworks/native/0001` (keystone), `patches/external/drm_hwcomposer/0001` (BCSH do VOP2),
 `patches/hardware/rockchip/codec2/0005` (10 bits), `patches/hardware/interfaces/0002` (Bluetooth no
-init), `sensors/`, `bluetooth/`, `tvinput/` e `sepolicy/`. Conferência no host sem o Soong:
+init), `patches/frameworks/native/0002` (testes do keystone), `sensors/`, `bluetooth/`, `tvinput/`,
+`hdmiin/` (captura da entrada HDMI), `apps/HdmiInput` e `sepolicy/`. Conferência no host sem o Soong:
 `python3 -I -m unittest discover -s tools/tests` (inclui os gtest do código novo) e
 `python3 -I tools/check_sepolicy.py <raiz do lineage>`.

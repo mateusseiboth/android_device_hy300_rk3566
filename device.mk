@@ -256,3 +256,15 @@ endif
 # gatilho de releitura quando as props persist carregam.
 PRODUCT_COPY_FILES += \
     $(DEVICE_PATH)/configs/init/hy300-keystone.rc:$(TARGET_COPY_OUT_SYSTEM_EXT)/etc/init/hy300-keystone.rc
+
+# Sensores: HAL AIDL próprio (sensors/) com o acelerômetro do keystone automático do app. O
+# backend e o dispositivo vêm das props abaixo; o padrão é o SC7A20 pelo framework "gsensor"
+# do kernel Rockchip (GS_SC7A20). Para um driver IIO: backend=iio e device=<nome do IIO>.
+PRODUCT_PACKAGES += android.hardware.sensors-service.hy300
+PRODUCT_COPY_FILES += \
+    frameworks/native/data/etc/android.hardware.sensor.accelerometer.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.hardware.sensor.accelerometer.xml
+PRODUCT_VENDOR_PROPERTIES += \
+    ro.vendor.hy300.accel.backend=rk-gsensor \
+    ro.vendor.hy300.accel.device=gsensor \
+    ro.vendor.hy300.accel.control=/dev/mma8452_daemon \
+    ro.vendor.hy300.accel.axes=x,y,z

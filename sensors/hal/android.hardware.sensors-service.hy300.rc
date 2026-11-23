@@ -1,0 +1,8 @@
+# SPDX-FileCopyrightText: 2026 Mateus Seiboth
+# SPDX-License-Identifier: Apache-2.0
+service vendor.sensors-hy300 /vendor/bin/hw/android.hardware.sensors-service.hy300
+    interface aidl android.hardware.sensors.ISensors/default
+    class hal
+    user system
+    group system input
+    rlimit rtprio 10 10

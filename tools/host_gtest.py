@@ -36,15 +36,24 @@ def extract(patch, includes, destination):
                    capture_output=True, text=True)
 
 
+def run_sources(sources, extra_flags=(), std="c++20"):
+    """Compila `sources` (caminhos completos) com gtest e roda."""
+    with tempfile.TemporaryDirectory() as work:
+        return compile_and_run(work, sources, extra_flags, std)
+
+
+def compile_and_run(work, sources, extra_flags, std):
+    binary = os.path.join(work, "test")
+    compile_args = [find_compiler(), f"-std={std}", *WARNINGS, *extra_flags, *sources,
+                    "-lgtest", "-lgtest_main", "-pthread", "-o", binary]
+    subprocess.run(compile_args, check=True, capture_output=True, text=True)
+    return subprocess.run([binary], capture_output=True, text=True)
+
+
 def run(patch, includes, sources, extra_flags=(), std="c++20"):
     """Extrai, compila `sources` (relativos à raiz do projeto do patch) e roda. Devolve o
     CompletedProcess da execução; levanta CalledProcessError se a compilação falhar."""
-    compiler = find_compiler()
     with tempfile.TemporaryDirectory() as work:
         extract(patch, includes, work)
-        binary = os.path.join(work, "test")
-        compile_args = [compiler, f"-std={std}", *WARNINGS, *extra_flags,
-                        *[os.path.join(work, source) for source in sources],
-                        "-lgtest", "-lgtest_main", "-pthread", "-o", binary]
-        subprocess.run(compile_args, check=True, capture_output=True, text=True)
-        return subprocess.run([binary], capture_output=True, text=True)
+        return compile_and_run(work, [os.path.join(work, source) for source in sources],
+                               extra_flags, std)

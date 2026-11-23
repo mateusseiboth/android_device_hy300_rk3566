@@ -1,0 +1,70 @@
+//
+// SPDX-FileCopyrightText: 2026 Mateus Seiboth
+// SPDX-License-Identifier: Apache-2.0
+//
+// HAL de sensores AIDL do HY300 (acelerômetro do keystone automático). O núcleo (core/) não
+// depende do Android e é testado no host (tools/tests/test_sensors.py, ou este cc_test).
+
+cc_defaults {
+    name: "hy300_sensors_defaults",
+    cflags: [
+        "-Wall",
+        "-Werror",
+        "-Wextra",
+        "-Wconversion",
+    ],
+    cpp_std: "c++20",
+}
+
+cc_library_static {
+    name: "libhy300sensors_core",
+    defaults: ["hy300_sensors_defaults"],
+    vendor_available: true,
+    host_supported: true,
+    srcs: [
+        "core/AccelConfig.cpp",
+        "core/AccelReader.cpp",
+        "core/IioAccelSource.cpp",
+        "core/InputAccelSource.cpp",
+        "core/OpenAccelSource.cpp",
+        "core/RkGsensorControl.cpp",
+    ],
+    export_include_dirs: ["core"],
+}
+
+cc_test {
+    name: "hy300-sensors-core-test",
+    defaults: ["hy300_sensors_defaults"],
+    host_supported: true,
+    srcs: ["tests/AccelCoreTest.cpp"],
+    static_libs: ["libhy300sensors_core"],
+    test_suites: ["general-tests"],
+}
+
+cc_binary {
+    name: "android.hardware.sensors-service.hy300",
+    defaults: ["hy300_sensors_defaults"],
+    vendor: true,
+    relative_install_path: "hw",
+    srcs: [
+        "hal/AccelSensor.cpp",
+        "hal/Sensors.cpp",
+        "hal/main.cpp",
+    ],
+    init_rc: ["hal/android.hardware.sensors-service.hy300.rc"],
+    vintf_fragments: ["hal/android.hardware.sensors-service.hy300.xml"],
+    shared_libs: [
+        "libbase",
+        "libbinder_ndk",
+        "libcutils",
+        "libfmq",
+        "liblog",
+        "libutils",
+    ],
+    static_libs: [
+        "android.hardware.common-V2-ndk",
+        "android.hardware.common.fmq-V1-ndk",
+        "android.hardware.sensors-V3-ndk",
+        "libhy300sensors_core",
+    ],
+}

@@ -15,3 +15,8 @@
 /dev/video*               0660   system     camera
 /dev/v4l-subdev*          0660   system     camera
 /dev/media*               0660   system     camera
+
+# Acelerômetro SC7A20 pelo framework "gsensor" da Rockchip: nó de controle (ioctl de liga,
+# desliga e taxa) do HAL de sensores (sensors/, usuário system). Os eventos vêm do
+# /dev/input/eventN "gsensor" (grupo input).
+/dev/mma8452_daemon       0660   system     input

@@ -166,6 +166,3 @@ BOARD_MESA3D_EXTRA_MESON_ARGS := -Dmesa-clc=system -Dprecomp-compiler=system \
 
 # SELinux: começa permissive (cmdline). A política própria (sysfs do motor e dos LEDs,
 # props persist.sys.keystone.* e persist.txcz.*) entra num marco próprio.
-
-# AIDs do vendor (config.fs): grupo vendor_hy300_hw do motor de foco e dos LEDs.
-TARGET_FS_CONFIG_GEN += $(DEVICE_PATH)/config.fs

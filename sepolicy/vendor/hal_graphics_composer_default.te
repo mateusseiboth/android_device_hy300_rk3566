@@ -1,0 +1,6 @@
+# drm_hwcomposer no VOP2: nós do DRM, uevents de hotplug e o BCSH das props da Rockchip.
+hal_client_domain(hal_graphics_composer_default, hal_graphics_allocator)
+allow hal_graphics_composer_default gpu_device:dir search;
+allow hal_graphics_composer_default gpu_device:chr_file rw_file_perms;
+allow hal_graphics_composer_default self:netlink_kobject_uevent_socket { create bind read };
+get_prop(hal_graphics_composer_default, hy300_picture_prop)

@@ -164,5 +164,9 @@ BOARD_MESA3D_VULKAN_DRIVERS :=
 BOARD_MESA3D_EXTRA_MESON_ARGS := -Dmesa-clc=system -Dprecomp-compiler=system \
     -Doptimization=2 -Db_ndebug=true
 
-# SELinux: começa permissive (cmdline). A política própria (sysfs do motor e dos LEDs,
-# props persist.sys.keystone.* e persist.txcz.*) entra num marco próprio.
+# SELinux: a política do aparelho está em sepolicy/ (vendor e system_ext) e passa nas neverallows
+# do build (tools/check_sepolicy.py). O boot continua permissive pela cmdline
+# (androidboot.selinux=permissive) até o teste no aparelho; para enforcing, tirar essa linha.
+BOARD_VENDOR_SEPOLICY_DIRS += $(DEVICE_PATH)/sepolicy/vendor
+SYSTEM_EXT_PUBLIC_SEPOLICY_DIRS += $(DEVICE_PATH)/sepolicy/system_ext/public
+SYSTEM_EXT_PRIVATE_SEPOLICY_DIRS += $(DEVICE_PATH)/sepolicy/system_ext/private

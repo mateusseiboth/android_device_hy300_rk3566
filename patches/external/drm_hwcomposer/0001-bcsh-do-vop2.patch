@@ -1,8 +1,9 @@
 HY300: brilho, contraste, saturação e matiz pelo bloco BCSH do VOP2.
 
 O kernel BSP da Rockchip põe "brightness", "contrast", "saturation" e "hue" (0 a 100) em todo
-conector; o drm_hwcomposer passa a gravá-las em cada commit a partir de
-persist.vendor.<item>.main/.aux, as mesmas props que o HWC da Rockchip lia.
+conector; o drm_hwcomposer passa a gravá-las em cada commit do display principal a partir de
+persist.sys.hy300.picture.<item>, que o app de configurações grava (o equivalente das
+persist.vendor.<item>.main do HWC da Rockchip, que o sistema não pode gravar no Treble).
 
 diff --git a/Android.bp b/Android.bp
 index 4183e34..dd0adb2 100644
@@ -161,7 +162,7 @@ index 00d05b4..0ecdf4a 100644
    DrmProperty link_status_property_;
    DrmProperty panel_orientation_;
 diff --git a/hwc/HwcDisplay.cpp b/hwc/HwcDisplay.cpp
-index 7f3b7ee..5dee419 100644
+index 7f3b7ee..c811313 100644
 --- a/hwc/HwcDisplay.cpp
 +++ b/hwc/HwcDisplay.cpp
 @@ -918,6 +918,7 @@ AtomicCommitArgs HwcDisplay::CreateModesetCommit(
@@ -180,14 +181,16 @@ index 7f3b7ee..5dee419 100644
  
    if (staged_mode_config_id_ &&
        staged_mode_change_time_ <= ResourceManager::GetTimeMonotonicNs()) {
-@@ -1263,6 +1265,14 @@ std::shared_ptr<BindingOwner<DrmPlane>> HwcDisplay::GetCursorPlane() const {
+@@ -1263,6 +1265,16 @@ std::shared_ptr<BindingOwner<DrmPlane>> HwcDisplay::GetCursorPlane() const {
    return pipeline_->GetUsablePlanes().second;
  }
  
-+Bcsh HwcDisplay::GetBcsh() const {
++std::optional<Bcsh> HwcDisplay::GetBcsh() const {
++  if (handle_ != kPrimaryDisplay) {
++    return std::nullopt;
++  }
 +  if (!bcsh_source_) {
-+    bcsh_source_ = BcshSource::FromSystemProperties(
-+        handle_ == kPrimaryDisplay ? "main" : "aux");
++    bcsh_source_ = BcshSource::FromSystemProperties();
 +  }
 +  return bcsh_source_->Get();
 +}
@@ -196,7 +199,7 @@ index 7f3b7ee..5dee419 100644
    if (color_transform_is_identity_)
      return false;
 diff --git a/hwc/HwcDisplay.h b/hwc/HwcDisplay.h
-index efbeb49..c7e8085 100644
+index efbeb49..d7a6bea 100644
 --- a/hwc/HwcDisplay.h
 +++ b/hwc/HwcDisplay.h
 @@ -26,6 +26,7 @@
@@ -211,9 +214,9 @@ index efbeb49..c7e8085 100644
        const HwcDisplayConfig *config,
        const std::optional<LayerData> &modeset_layer);
  
-+  // HY300: BCSH of this display from persist.vendor.<item>.main (primary) or
-+  // .aux, the props of the Rockchip HWC.
-+  Bcsh GetBcsh() const;
++  // HY300: BCSH of the primary display (persist.sys.hy300.picture.<item>);
++  // nullopt on the other displays.
++  std::optional<Bcsh> GetBcsh() const;
 +
    std::optional<AtomicCommitResult> ExecuteAtomicCommit(
        AtomicCommitArgs &a_args) const;
@@ -228,10 +231,10 @@ index efbeb49..c7e8085 100644
    // the composition is committed.
 diff --git a/utils/Bcsh.cpp b/utils/Bcsh.cpp
 new file mode 100644
-index 0000000..6117458
+index 0000000..445ab86
 --- /dev/null
 +++ b/utils/Bcsh.cpp
-@@ -0,0 +1,61 @@
+@@ -0,0 +1,57 @@
 +/*
 + * SPDX-FileCopyrightText: 2026 Mateus Seiboth
 + * SPDX-License-Identifier: Apache-2.0
@@ -247,10 +250,9 @@ index 0000000..6117458
 +
 +namespace {
 +
-+uint64_t ReadItem(const PropertyGetter &get, std::string_view item,
-+                  std::string_view display) {
-+  std::string name = "persist.vendor.";
-+  name.append(item).append(".").append(display);
++uint64_t ReadItem(const PropertyGetter &get, std::string_view item) {
++  std::string name = "persist.sys.hy300.picture.";
++  name.append(item);
 +  return ParseBcshValue(get(name.c_str()));
 +}
 +
@@ -267,26 +269,23 @@ index 0000000..6117458
 +      std::clamp<int64_t>(value, 0, static_cast<int64_t>(kBcshMax)));
 +}
 +
-+Bcsh ReadBcsh(const PropertyGetter &get, std::string_view display) {
++Bcsh ReadBcsh(const PropertyGetter &get) {
 +  Bcsh bcsh;
-+  bcsh.brightness = ReadItem(get, "brightness", display);
-+  bcsh.contrast = ReadItem(get, "contrast", display);
-+  bcsh.saturation = ReadItem(get, "saturation", display);
-+  bcsh.hue = ReadItem(get, "hue", display);
++  bcsh.brightness = ReadItem(get, "brightness");
++  bcsh.contrast = ReadItem(get, "contrast");
++  bcsh.saturation = ReadItem(get, "saturation");
++  bcsh.hue = ReadItem(get, "hue");
 +  return bcsh;
 +}
 +
-+BcshSource::BcshSource(PropertyGetter get, PropertySerial serial,
-+                       std::string display)
-+    : get_(std::move(get)),
-+      serial_(std::move(serial)),
-+      display_(std::move(display)) {
++BcshSource::BcshSource(PropertyGetter get, PropertySerial serial)
++    : get_(std::move(get)), serial_(std::move(serial)) {
 +}
 +
 +Bcsh BcshSource::Get() {
 +  const uint32_t serial = serial_();
 +  if (last_serial_ != serial) {
-+    last_ = ReadBcsh(get_, display_);
++    last_ = ReadBcsh(get_);
 +    last_serial_ = serial;
 +  }
 +  return last_;
@@ -295,10 +294,10 @@ index 0000000..6117458
 +}  // namespace android::drm_hwcomposer
 diff --git a/utils/Bcsh.h b/utils/Bcsh.h
 new file mode 100644
-index 0000000..156332a
+index 0000000..bdaf81c
 --- /dev/null
 +++ b/utils/Bcsh.h
-@@ -0,0 +1,70 @@
+@@ -0,0 +1,69 @@
 +/*
 + * SPDX-FileCopyrightText: 2026 Mateus Seiboth
 + * SPDX-License-Identifier: Apache-2.0
@@ -316,9 +315,10 @@ index 0000000..156332a
 +
 +// Brilho, contraste, saturação e matiz (BCSH) feitos pelo hardware de vídeo da Rockchip (bloco
 +// BCSH do VOP2, depois da composição). O kernel BSP põe as propriedades "brightness",
-+// "contrast", "saturation" e "hue" (0 a 100, neutro em 50) em todo conector. O HWC da Rockchip
-+// lia persist.vendor.<item>.main (display principal) e .aux, na mesma escala; os apps de
-+// configurações continuam gravando essas props.
++// "contrast", "saturation" e "hue" (0 a 100, neutro em 50) em todo conector. Valem para o
++// display principal e vêm de persist.sys.hy300.picture.<item>, na mesma escala das
++// persist.vendor.<item>.main do HWC da Rockchip. O nome é do sistema porque quem grava é o app de
++// configurações (sistema), e a sepolicy do Treble não deixa o sistema gravar props do vendor.
 +constexpr uint64_t kBcshNeutral = 50;
 +constexpr uint64_t kBcshMax = 100;
 +
@@ -346,24 +346,22 @@ index 0000000..156332a
 +// "0" a "100"; vazio ou inválido é o neutro, fora da faixa vai para o limite.
 +uint64_t ParseBcshValue(std::string_view text);
 +
-+// display: "main" ou "aux", o sufixo das props do HWC da Rockchip.
-+Bcsh ReadBcsh(const PropertyGetter &get, std::string_view display);
++Bcsh ReadBcsh(const PropertyGetter &get);
 +
 +// Relê as props só quando alguma propriedade do sistema mudou (serial global da área de
 +// propriedades), para custar quase nada a cada quadro.
 +class BcshSource {
 + public:
-+  BcshSource(PropertyGetter get, PropertySerial serial, std::string display);
++  BcshSource(PropertyGetter get, PropertySerial serial);
 +
 +  // Props reais do Android (property_get e __system_property_area_serial).
-+  static BcshSource FromSystemProperties(std::string display);
++  static BcshSource FromSystemProperties();
 +
 +  Bcsh Get();
 +
 + private:
 +  PropertyGetter get_;
 +  PropertySerial serial_;
-+  std::string display_;
 +  std::optional<uint32_t> last_serial_;
 +  Bcsh last_{};
 +};
@@ -371,7 +369,7 @@ index 0000000..156332a
 +}  // namespace android::drm_hwcomposer
 diff --git a/utils/BcshProperties.cpp b/utils/BcshProperties.cpp
 new file mode 100644
-index 0000000..61bd990
+index 0000000..50ee7f8
 --- /dev/null
 +++ b/utils/BcshProperties.cpp
 @@ -0,0 +1,22 @@
@@ -387,22 +385,22 @@ index 0000000..61bd990
 +
 +namespace android::drm_hwcomposer {
 +
-+BcshSource BcshSource::FromSystemProperties(std::string display) {
++BcshSource BcshSource::FromSystemProperties() {
 +  return {[](const char *name) {
 +            char value[PROPERTY_VALUE_MAX] = {};
 +            property_get(name, value, "");
 +            return std::string(value);
 +          },
-+          [] { return __system_property_area_serial(); }, std::move(display)};
++          [] { return __system_property_area_serial(); }};
 +}
 +
 +}  // namespace android::drm_hwcomposer
 diff --git a/utils/BcshTest.cpp b/utils/BcshTest.cpp
 new file mode 100644
-index 0000000..c671861
+index 0000000..e6a740a
 --- /dev/null
 +++ b/utils/BcshTest.cpp
-@@ -0,0 +1,91 @@
+@@ -0,0 +1,87 @@
 +/*
 + * SPDX-FileCopyrightText: 2026 Mateus Seiboth
 + * SPDX-License-Identifier: Apache-2.0
@@ -448,46 +446,42 @@ index 0000000..c671861
 +  EXPECT_EQ(ParseBcshValue("250"), kBcshMax);
 +}
 +
-+TEST(BcshReadTest, ReadsThePropsOfTheRockchipHwc) {
++TEST(BcshReadTest, ReadsThePictureProps) {
 +  FakeProperties props;
-+  props.values = {{"persist.vendor.brightness.main", "60"},
-+                  {"persist.vendor.contrast.main", "45"},
-+                  {"persist.vendor.saturation.main", "70"},
-+                  {"persist.vendor.hue.main", "52"}};
-+  const Bcsh bcsh = ReadBcsh([&](const char *n) { return props.Get(n); },
-+                             "main");
++  props.values = {{"persist.sys.hy300.picture.brightness", "60"},
++                  {"persist.sys.hy300.picture.contrast", "45"},
++                  {"persist.sys.hy300.picture.saturation", "70"},
++                  {"persist.sys.hy300.picture.hue", "52"}};
++  const Bcsh bcsh = ReadBcsh([&](const char *n) { return props.Get(n); });
 +  EXPECT_EQ(bcsh, (Bcsh{60, 45, 70, 52}));
++}
++
++// As props do HWC da Rockchip não valem aqui: o app do sistema não pode gravá-las.
++TEST(BcshReadTest, IgnoresTheRockchipVendorProps) {
++  FakeProperties props;
++  props.values = {{"persist.vendor.brightness.main", "90"}};
++  EXPECT_TRUE(ReadBcsh([&](const char *n) { return props.Get(n); }).IsNeutral());
 +}
 +
 +TEST(BcshReadTest, MissingPropsAreNeutral) {
 +  FakeProperties props;
-+  const Bcsh bcsh = ReadBcsh([&](const char *n) { return props.Get(n); },
-+                             "main");
++  const Bcsh bcsh = ReadBcsh([&](const char *n) { return props.Get(n); });
 +  EXPECT_EQ(bcsh, Bcsh{});
 +  EXPECT_TRUE(bcsh.IsNeutral());
 +}
 +
-+TEST(BcshReadTest, AuxDisplayHasItsOwnProps) {
-+  FakeProperties props;
-+  props.values = {{"persist.vendor.brightness.main", "90"},
-+                  {"persist.vendor.brightness.aux", "10"}};
-+  const Bcsh bcsh = ReadBcsh([&](const char *n) { return props.Get(n); },
-+                             "aux");
-+  EXPECT_EQ(bcsh.brightness, 10U);
-+}
-+
 +TEST(BcshSourceTest, RereadsOnlyWhenAPropertyChanged) {
 +  FakeProperties props;
-+  props.values["persist.vendor.contrast.main"] = "40";
++  props.values["persist.sys.hy300.picture.contrast"] = "40";
 +  BcshSource source([&](const char *n) { return props.Get(n); },
-+                    [&] { return props.serial; }, "main");
++                    [&] { return props.serial; });
 +
 +  EXPECT_EQ(source.Get().contrast, 40U);
 +  const int reads = props.reads;
 +  EXPECT_EQ(source.Get().contrast, 40U);
 +  EXPECT_EQ(props.reads, reads);
 +
-+  props.values["persist.vendor.contrast.main"] = "65";
++  props.values["persist.sys.hy300.picture.contrast"] = "65";
 +  props.serial++;
 +  EXPECT_EQ(source.Get().contrast, 65U);
 +}

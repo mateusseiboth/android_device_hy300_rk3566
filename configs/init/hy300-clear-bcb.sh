@@ -1,4 +1,4 @@
-#!/system/bin/sh
+#!/vendor/bin/sh
 # Apaga o comando "boot-recovery" do BCB da misc no boot do LineageOS (origem: android/clear-bcb do
 # hy300-alpine; instalado em /vendor/bin pelo device.mk e iniciado pelo init.rk3566.rc).
 #

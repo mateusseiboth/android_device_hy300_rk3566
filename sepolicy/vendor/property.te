@@ -1,0 +1,5 @@
+# Configuração dos HALs do aparelho (ro.vendor.hy300.*, vendor.ser.bt-uart): só o vendor lê.
+vendor_internal_prop(vendor_hy300_hw_prop)
+
+# vendor.hy300.wifi.iface: o hy300-wifi-modules grava a interface do AIC8800 (ou "falhou").
+vendor_internal_prop(vendor_hy300_wifi_prop)

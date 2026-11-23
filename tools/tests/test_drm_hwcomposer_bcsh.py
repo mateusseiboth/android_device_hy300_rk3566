@@ -1,5 +1,5 @@
 """Testes do BCSH no drm_hwcomposer (patches/external/drm_hwcomposer/0001): a leitura das props
-persist.vendor.{brightness,contrast,saturation,hue}.main é compilada e testada no host, tirada
+persist.sys.hy300.picture.{brightness,contrast,saturation,hue} é compilada e testada no host, tirada
 do próprio patch, com o mesmo padrão de C++ do projeto (gnu++17).
 
 Rodar, na raiz da árvore: python3 -I -m unittest discover -s tools/tests
@@ -13,7 +13,7 @@ sys.path.insert(0, os.path.join(HERE, ".."))
 import host_gtest  # noqa: E402
 
 PATCH = os.path.join(HERE, "..", "..", "patches", "external", "drm_hwcomposer",
-                     "0001-bcsh-do-vop2-pelas-props-da-rockchip.patch")
+                     "0001-bcsh-do-vop2.patch")
 
 
 def read_patch():

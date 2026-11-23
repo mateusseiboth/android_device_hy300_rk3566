@@ -1,0 +1,3 @@
+# Brilho, contraste, saturação e matiz do VOP2 (persist.sys.hy300.picture.*): o app de
+# configurações grava, o drm_hwcomposer (vendor) lê.
+system_public_prop(hy300_picture_prop)

@@ -1,0 +1,4 @@
+# init.rk3566.rc: governadores do devfreq (GPU e DDR) e permissões do motor e dos LEDs.
+allow init sysfs_hy300_devfreq:file w_file_perms;
+allow init sysfs_hy300_motor:file setattr;
+allow init sysfs_hy300_leds:file setattr;

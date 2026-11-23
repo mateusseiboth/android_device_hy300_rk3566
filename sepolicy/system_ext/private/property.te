@@ -1,0 +1,6 @@
+# Keystone (patches/frameworks/native/0001): persist.sys.keystone.*. O app grava os cantos e o
+# gatilho; o SurfaceFlinger lê e devolve o gatilho para 0; o init dá o gatilho no boot.
+system_internal_prop(hy300_keystone_prop)
+
+# Estado do app de configurações herdado da TXCZ (persist.txcz.*): só o app.
+system_internal_prop(hy300_settings_prop)

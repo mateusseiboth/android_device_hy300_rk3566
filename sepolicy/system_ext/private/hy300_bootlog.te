@@ -1,0 +1,47 @@
+# Animação de boot com log ao vivo: o bootlog.sh (sh do sistema) roda a versão nativa
+# (/system_ext/bin/hy300-bootlog-native: libgui, EGL do Mesa, logcat por popen) e, se ela não
+# desenhar, o bootanimation (que volta ao domínio bootanim) e a versão Java (app_process).
+typeattribute hy300_bootlog coredomain;
+
+# O serviço é "/system/bin/sh bootlog.sh" com seclabel: a entrada é o sh do sistema.
+domain_trans(init, shell_exec, hy300_bootlog)
+
+# Os comandos do script (cat, head, sleep, kill, rm).
+allow hy300_bootlog shell_exec:file rx_file_perms;
+allow hy300_bootlog toolbox_exec:file rx_file_perms;
+allow hy300_bootlog system_file:file execute_no_trans;
+allow hy300_bootlog self:process signal;
+
+# Log ao vivo e mensagens no kmsg.
+allow hy300_bootlog logcat_exec:file rx_file_perms;
+read_logd(hy300_bootlog)
+allow hy300_bootlog kmsg_device:chr_file w_file_perms;
+
+# Tamanho da tela pelo conector DRM ligado (/sys/class/drm/card*-*/{status,modes}).
+allow hy300_bootlog sysfs:dir r_dir_perms;
+allow hy300_bootlog sysfs:lnk_file read;
+r_dir_file(hy300_bootlog, sysfs_hy300_display)
+
+# Desenho pelo SurfaceFlinger, com o EGL do Mesa.
+binder_use(hy300_bootlog)
+binder_call(hy300_bootlog, surfaceflinger)
+allow hy300_bootlog surfaceflinger_service:service_manager find;
+hal_client_domain(hy300_bootlog, hal_graphics_allocator)
+allow hy300_bootlog gpu_device:dir search;
+allow hy300_bootlog gpu_device:chr_file rw_file_perms;
+r_dir_file(hy300_bootlog, sysfs_gpu)
+
+# O bootanimation com o logo volta ao próprio domínio.
+domain_auto_trans(hy300_bootlog, bootanim_exec, bootanim)
+allow hy300_bootlog bootanim:process signal;
+
+# Versão Java pelo app_process (sem zygote), com o jar do /product.
+allow hy300_bootlog zygote_exec:file rx_file_perms;
+allow hy300_bootlog system_file:file rx_file_perms;
+allow hy300_bootlog dalvikcache_data_file:dir r_dir_perms;
+allow hy300_bootlog dalvikcache_data_file:file r_file_perms;
+allow hy300_bootlog self:process execmem;
+
+# Marca do 1º quadro ($BOOTLOG_READY = /dev/hy300-bootlog/ready).
+allow hy300_bootlog hy300_bootlog_dev_file:dir rw_dir_perms;
+allow hy300_bootlog hy300_bootlog_dev_file:file create_file_perms;

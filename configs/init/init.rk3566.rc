@@ -72,10 +72,12 @@ on boot
 # fábrica" gravam boot-recovery no BCB da misc, o U-Boot passa a subir sempre a recovery e o
 # Alpine fica inalcançável. O script apaga só esse comando (2048 bytes do bootloader_message), no
 # começo e no fim do boot. Mesma lógica do android/clear-bcb do hy300-alpine.
-service hy300-clear-bcb /vendor/bin/sh /vendor/bin/hy300-clear-bcb.sh
+# Domínio vendor_misc_writer (sepolicy/vendor/hy300_clear_bcb.te): roda em todo build, e o su
+# só existe no userdebug. Só o toybox do vendor (PATH).
+service hy300-clear-bcb /vendor/bin/hy300-clear-bcb.sh
     user root
     group root
-    seclabel u:r:su:s0
+    setenv PATH /vendor/bin:/vendor/xbin
     disabled
     oneshot
 
@@ -112,10 +114,11 @@ on post-fs && property:ro.build.type=userdebug
 
 # Wi-Fi AIC8800: os módulos sobem em segundo plano (a carga do firmware leva ~40 s) e a interface
 # fica para o Android (wificond + wpa_supplicant, sem HAL Wi-Fi do fabricante).
-service hy300-wifi-modules /vendor/bin/sh /vendor/bin/hy300-wifi-modules.sh
+# Domínio hy300_wifi_modules (sepolicy/vendor), pelo rótulo do script. Só o toybox do vendor (PATH).
+service hy300-wifi-modules /vendor/bin/hy300-wifi-modules.sh
     user root
     group root
-    seclabel u:r:vendor_modprobe:s0
+    setenv PATH /vendor/bin:/vendor/xbin
     disabled
     oneshot
 

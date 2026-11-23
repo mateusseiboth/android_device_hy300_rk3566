@@ -1,0 +1,5 @@
+# HAL de TV input do HY300 (tvinput/): subdev do RK628 (cabo e resolução) e o /dev/videoN do
+# rkisp, achados pelo nome em /sys/class/video4linux.
+allow hal_tv_input_default video_device:chr_file rw_file_perms;
+get_prop(hal_tv_input_default, vendor_hy300_hw_prop)
+r_dir_file(hal_tv_input_default, sysfs)

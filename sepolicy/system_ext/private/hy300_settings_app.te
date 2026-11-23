@@ -1,0 +1,22 @@
+# App de configurações do projetor: priv-app com a chave de plataforma, em domínio próprio em
+# vez de platform_app. Grava as props do keystone e o estado TXCZ com o setprop do toybox
+# (Sys.java), e lê o resto com o getprop.
+typeattribute hy300_settings_app coredomain;
+app_domain(hy300_settings_app)
+
+allow hy300_settings_app app_api_service:service_manager find;
+allow hy300_settings_app system_api_service:service_manager find;
+
+allow hy300_settings_app shell_exec:file rx_file_perms;
+allow hy300_settings_app toolbox_exec:file rx_file_perms;
+set_prop(hy300_settings_app, hy300_keystone_prop)
+set_prop(hy300_settings_app, hy300_settings_prop)
+set_prop(hy300_settings_app, hy300_picture_prop)
+
+# O getprop sem argumento percorre todas as áreas de props; as que o app não pode ler ficam de fora
+# sem prejuízo.
+dontaudit hy300_settings_app property_type:file read;
+
+# /sys/class/motor_cc e /sys/class/leds são links; os nós em si têm tipo próprio (vendor).
+allow hy300_settings_app sysfs:dir search;
+allow hy300_settings_app sysfs:lnk_file read;

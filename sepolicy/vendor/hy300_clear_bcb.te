@@ -1,0 +1,12 @@
+# hy300-clear-bcb (configs/init): apaga só o "boot-recovery" do BCB da misc, em todo build, para
+# o U-Boot voltar ao Alpine. Roda no domínio vendor_misc_writer do AOSP, o único do vendor que a
+# política deixa escrever na misc, com o script como ponto de entrada. Shell e toybox do vendor.
+type hy300_clear_bcb_exec, exec_type, vendor_file_type, file_type;
+domain_auto_trans(init, hy300_clear_bcb_exec, vendor_misc_writer)
+allow vendor_misc_writer hy300_clear_bcb_exec:file { entrypoint rx_file_perms };
+
+allow vendor_misc_writer vendor_shell_exec:file rx_file_perms;
+allow vendor_misc_writer vendor_toolbox_exec:file rx_file_perms;
+allow vendor_misc_writer block_device:dir search;
+allow vendor_misc_writer misc_block_device:blk_file rw_file_perms;
+allow vendor_misc_writer kmsg_device:chr_file w_file_perms;

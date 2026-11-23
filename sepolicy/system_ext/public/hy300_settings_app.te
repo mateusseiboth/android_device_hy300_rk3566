@@ -1,0 +1,3 @@
+# App de configurações do projetor (io.github.hy300.settings). Público para a política do vendor
+# poder dar a ele o motor de foco e as props de imagem do VOP2.
+type hy300_settings_app, domain;

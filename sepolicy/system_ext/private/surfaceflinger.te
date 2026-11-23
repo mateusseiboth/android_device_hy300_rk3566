@@ -1,0 +1,2 @@
+# Keystone: o SurfaceFlinger lê os cantos e devolve persist.sys.keystone.update para 0.
+set_prop(surfaceflinger, hy300_keystone_prop)

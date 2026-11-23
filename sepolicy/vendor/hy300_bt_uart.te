@@ -1,0 +1,11 @@
+# hy300-bt-uart (bluetooth/): liga os rfkill de Bluetooth e ajusta a UART1 antes do HAL; no modo
+# "hci" põe a disciplina de linha N_HCI (exige CAP_NET_ADMIN) e segura o tty.
+type hy300_bt_uart, domain;
+type hy300_bt_uart_exec, exec_type, vendor_file_type, file_type;
+init_daemon_domain(hy300_bt_uart)
+
+allow hy300_bt_uart hci_attach_dev:chr_file rw_file_perms;
+allow hy300_bt_uart self:capability net_admin;
+r_dir_file(hy300_bt_uart, sysfs_bluetooth_writable)
+allow hy300_bt_uart sysfs_bluetooth_writable:file w_file_perms;
+get_prop(hy300_bt_uart, vendor_hy300_hw_prop)

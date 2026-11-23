@@ -1,0 +1,2 @@
+# O app de configurações tem domínio próprio (hy300_settings_app, sepolicy/system_ext). Antes
+# ele rodava como platform_app; este arquivo fica vazio para a integração com a árvore principal.

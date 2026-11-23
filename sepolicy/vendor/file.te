@@ -1,0 +1,11 @@
+# Motor de foco (hy300_focus_motor): /sys/class/motor_cc/motor_cc/{motor,hd_camera_on}.
+type sysfs_hy300_motor, sysfs_type, fs_type;
+
+# /sys/firmware/devicetree/base/compatible: o Codec2 da Rockchip descobre o chip por ele.
+type sysfs_hy300_dt_compatible, sysfs_type, fs_type;
+
+# LEDs indicadores green e red (gpio-leds), que o app de configurações liga e desliga.
+type sysfs_hy300_leds, sysfs_type, fs_type;
+
+# Governadores do devfreq (GPU e DDR), que o init.rk3566.rc põe em performance.
+type sysfs_hy300_devfreq, sysfs_type, fs_type;

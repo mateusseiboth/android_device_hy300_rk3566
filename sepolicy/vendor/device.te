@@ -1,0 +1,5 @@
+# Nó de controle do framework "gsensor" da Rockchip (ioctl de liga, desliga e taxa do SC7A20).
+type hy300_gsensor_device, dev_type;
+
+# Vendor storage da Rockchip (id 50 = modo de instalação, que o U-Boot lê).
+type hy300_vendor_storage_device, dev_type;

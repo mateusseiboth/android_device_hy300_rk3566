@@ -116,9 +116,15 @@ PRODUCT_PRODUCT_PROPERTIES += \
 #    system_server (foi o que aconteceu no primeiro boot). O exemplo do AOSP responde tudo.
 #  - Áudio AIDL (core + effect, APEX de exemplo do AOSP): sem ele o audioserver fica sem módulo
 #    primário; o exemplo usa o ALSA do card 0 (I2S1).
+#  - O serviço de efeitos do APEX procura audio_effects_config.xml no APEX (não está lá) e depois
+#    no /vendor/etc; sem o arquivo ele sai, o "onrestart" reinicia o audioserver em laço, e o
+#    AudioService trava o system_server (o Watchdog o mata). O exemplo do AOSP instala o arquivo
+#    no vendor com esta variável.
+$(call soong_config_set_bool,hardware_interfaces_audio,use_default_audio_effects_config,true)
 PRODUCT_PACKAGES += \
     android.hardware.power-service.example \
-    com.android.hardware.audio
+    com.android.hardware.audio \
+    audio_effects_config.xml
 
 # Segurança e sistema por software (a fábrica usa OP-TEE com TA fechada). KeyMint é preciso
 # para o FBE do /data.

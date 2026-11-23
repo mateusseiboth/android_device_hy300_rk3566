@@ -100,7 +100,8 @@ service watchdogd /system/bin/watchdogd 10 20
 # ro.build.type: o LineageOS sai do userdebug com ro.debuggable=0), e o script
 # ainda exige androidboot.hy300.diag=1 na cmdline ou /metadata/hy300-diag/ativo. Começa no
 # post-fs (o /metadata já está montado pelo primeiro estágio) e reinicia normal aos 8 min.
-service hy300-diag /vendor/bin/sh /vendor/bin/hy300-diag.sh
+# /system/bin/sh: o sh do vendor força PATH=/vendor/bin:/vendor/xbin e não acha logcat, ip nem iw.
+service hy300-diag /system/bin/sh /vendor/bin/hy300-diag.sh
     user root
     group root log readproc
     seclabel u:r:su:s0

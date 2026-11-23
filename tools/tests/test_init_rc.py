@@ -33,7 +33,9 @@ def parse_rc(path):
             if not line or line.startswith("#"):
                 continue
             if line.startswith("service "):
-                current = {"kind": "service", "name": line.split()[1], "lines": []}
+                parts = line.split(maxsplit=2)
+                current = {"kind": "service", "name": parts[1],
+                           "command": parts[2] if len(parts) > 2 else "", "lines": []}
                 services[current["name"]] = current
             elif line.startswith("on "):
                 current = {"kind": "action", "trigger": line[3:], "lines": []}
@@ -103,6 +105,12 @@ class InitRcTest(unittest.TestCase):
         self.assertNotIn("ro.debuggable", props)
         self.assertEqual(props.get("ro.build.type"), "userdebug")
 
+    def test_diag_runs_with_the_system_shell(self):
+        # O sh do vendor (sh_vendor) força PATH=/vendor/bin:/vendor/xbin (MKSH_DEFPATH_OVERRIDE):
+        # no boot 2 logcat, ip e iw saíram "inaccessible or not found".
+        service = self.services["hy300-diag"]
+        self.assertTrue(service.get("command", "").startswith("/system/bin/sh "), service)
+
     def test_cmdline_property_triggers_match_board_cmdline(self):
         cmdline = read_cmdline_props()
         for action in self.actions:
@@ -112,8 +120,9 @@ class InitRcTest(unittest.TestCase):
                     self.assertIn(name, cmdline, action["trigger"])
 
     def test_gpu_choice_covers_the_board_cmdline(self):
+        # Padrão desde a rodada 4: GPU (a tempestade de IRQ do GPIO explicava as travadas).
         value = read_cmdline_props().get("ro.boot.hy300.gpu")
-        self.assertIn(value, ("panfrost", "sw"))
+        self.assertEqual(value, "panfrost")
         triggers = [split_trigger(a["trigger"])[1].get("ro.boot.hy300.gpu") for a in self.actions]
         self.assertIn("panfrost", triggers)
         self.assertIn("sw", triggers)

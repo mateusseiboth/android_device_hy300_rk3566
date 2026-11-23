@@ -80,9 +80,10 @@ BOARD_KERNEL_CMDLINE += panic=5 androidboot.init_fatal_panic=true
 # Imagem de teste do primeiro boot: liga o hy300-diag (logs no /metadata e reinício normal aos
 # 8 min, de volta ao Alpine). Tirar quando o Lineage tiver rede.
 BOARD_KERNEL_CMDLINE += androidboot.hy300.diag=1
-# GPU: "sw" (ANGLE + SwiftShader, sem panfrost.ko) até o Panfrost passar no aparelho; o
-# boot-panfrost.img troca para "panfrost" (tools/lineage_prebuilt.py variant do projeto).
-BOARD_KERNEL_CMDLINE += androidboot.hy300.gpu=sw
+# GPU: "panfrost" (Mesa). As travadas dos primeiros boots vinham de uma tempestade de IRQ do
+# GPIO da tecla Home no DT (corrigido no kernel 1ee24ab83ac1). O boot-sw.img troca para "sw"
+# (ANGLE + SwiftShader, sem panfrost.ko) como reserva (tools/lineage_prebuilt.py variant).
+BOARD_KERNEL_CMDLINE += androidboot.hy300.gpu=panfrost
 
 # Partições físicas (GPT de fábrica; o eMMC não é reparticionado).
 BOARD_FLASH_BLOCK_SIZE := 131072

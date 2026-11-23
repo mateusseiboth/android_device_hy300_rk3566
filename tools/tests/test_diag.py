@@ -73,7 +73,8 @@ class DiagTestBase(unittest.TestCase):
 
     def run_lib(self, code, **extra):
         script = f'HY300_DIAG_LIB=1 . "{SCRIPT}"; {code}'
-        return subprocess.run(["sh", "-c", script], env=self.env(**extra), capture_output=True,
+        env = self.env(**extra)
+        return subprocess.run(["/bin/sh", "-c", script], env=env, capture_output=True,
                               text=True, timeout=60)
 
     def run_main(self, **extra):
@@ -124,6 +125,15 @@ class EnabledTest(DiagTestBase):
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertFalse(os.path.exists(self.root))
         self.assertNotIn("setprop", self.calls_text())
+
+
+class PathTest(DiagTestBase):
+    def test_path_reaches_system_binaries(self):
+        # logcat, ip e iw ficam em /system/bin; o diag não pode depender do PATH de quem o chamou.
+        r = self.run_lib('echo "$PATH"', PATH="/vendor/bin:/vendor/xbin:" + self.bin)
+        entries = r.stdout.strip().split(":")
+        self.assertIn("/system/bin", entries)
+        self.assertLess(entries.index("/system/bin"), entries.index("/vendor/bin"))
 
 
 class BootDirTest(DiagTestBase):
@@ -177,6 +187,17 @@ class SnapshotTest(DiagTestBase):
         self.assertIn("saida de logcat -b all -d -v threadtime", self.read(d, "logcat.txt"))
         self.assertIn("[ro.boot.hy300.diag]: [1]", self.read(d, "getprop.txt"))
         self.assertIn("sync", self.calls_text())
+
+    def test_snapshot_keeps_interrupt_counts(self):
+        # Para conferir a tempestade de IRQ (a "GPIO Key Home" com as células do DT trocadas).
+        d = os.path.join(self.tmp, "boot")
+        os.makedirs(d)
+        proc = os.path.join(self.tmp, "proc")
+        os.makedirs(proc)
+        with open(os.path.join(proc, "interrupts"), "w") as f:
+            f.write(" 87:          3   GPIO Key Home\n")
+        self.run_lib(f'snapshot "{d}"')
+        self.assertIn("GPIO Key Home", self.read(d, "interrupts.txt"))
 
     def test_after_boot_collects_system_state(self):
         d = os.path.join(self.tmp, "boot")

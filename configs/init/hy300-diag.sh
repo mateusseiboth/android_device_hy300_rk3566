@@ -7,7 +7,8 @@
 # userdebug, pelo ro.build.type). Liga com androidboot.hy300.diag=1 na cmdline ou com
 # /metadata/hy300-diag/ativo.
 #
-# Grava em /metadata/hy300-diag/<n>/ (n = contador de boots; ficam as 3 últimas): dmesg, logcat e getprop a cada 20 s;
+# Grava em /metadata/hy300-diag/<n>/ (n = contador de boots; ficam as 3 últimas): dmesg, logcat,
+# getprop e /proc/interrupts a cada 20 s;
 # depois do boot_completed, o estado do sistema (SurfaceFlinger, codecs, memória, frequências,
 # módulos, processos); em paralelo, o teste do Wi-Fi AIC8800 só com o driver (sem HAL). Aos 8 min
 # de uptime, com ou sem boot_completed, grava a marca de "ficar" do Alpine na misc (0x10000, o
@@ -16,6 +17,11 @@
 # não grava BCB) e o U-Boot sobe a partição boot, onde está o Alpine.
 #
 # Testes: tools/tests/test_diag.py (HY300_DIAG_LIB=1 só define as funções).
+
+# logcat, ip, iw e dumpsys ficam em /system/bin. O sh do vendor força PATH=/vendor/bin:/vendor/xbin
+# (MKSH_DEFPATH_OVERRIDE do sh_vendor), e no boot 2 eles saíram "inaccessible or not found". O .rc
+# roda o diag com /system/bin/sh, e o PATH fica explícito aqui também.
+export PATH="/system/bin:/system_ext/bin:/vendor/bin:/vendor/xbin:$PATH"
 
 DIAG_ROOT="${HY300_DIAG_ROOT:-/metadata/hy300-diag}"
 DIAG_UPTIME="${HY300_DIAG_UPTIME:-/proc/uptime}"
@@ -94,6 +100,7 @@ snapshot() {
 	OUT_FILE="$1/dmesg.txt" save_output dmesg
 	OUT_FILE="$1/logcat.txt" save_output logcat -b all -d -v threadtime
 	OUT_FILE="$1/getprop.txt" save_output getprop
+	OUT_FILE="$1/interrupts.txt" save_output cat "$DIAG_PROC/interrupts"
 	sync
 }
 

@@ -1,0 +1,17 @@
+<!--
+    SPDX-FileCopyrightText: 2026 Mateus Seiboth
+    SPDX-License-Identifier: Apache-2.0
+
+    HALs próprios do HY300 que o lado do sistema usa: todo HAL do manifesto do vendor tem de
+    estar numa matriz do framework, senão o check_vintf recusa.
+-->
+<compatibility-matrix version="1.0" type="framework">
+    <hal format="aidl" optional="true">
+        <name>vendor.hy300.hdmiin</name>
+        <version>1</version>
+        <interface>
+            <name>IHdmiCapture</name>
+            <instance>default</instance>
+        </interface>
+    </hal>
+</compatibility-matrix>

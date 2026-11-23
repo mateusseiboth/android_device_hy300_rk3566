@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">HDMI</string>
+    <string name="hdmi_label">HDMI</string>
+    <string name="hdmi_no_signal">Sem sinal na entrada HDMI. Ligue a fonte ou confira o cabo.</string>
+    <string name="hdmi_missing">Entrada HDMI indisponível.</string>
+</resources>

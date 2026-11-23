@@ -1,0 +1,119 @@
+HY300: testes do keystone com espelho e da composição pelo cliente.
+
+Espelho horizontal/vertical (modos de instalação pelos cantos e persist.sys.keystone.mirror_x/y)
+combinado com a homografia, e um teste da CompositionEngine: com keystone, toda camada do display
+vai para a composição pelo cliente (nenhum vídeo em plano do VOP2 nem sideband escapa).
+
+diff --git a/services/surfaceflinger/CompositionEngine/tests/OutputTest.cpp b/services/surfaceflinger/CompositionEngine/tests/OutputTest.cpp
+index 3f1d403..a7d951a 100644
+--- a/services/surfaceflinger/CompositionEngine/tests/OutputTest.cpp
++++ b/services/surfaceflinger/CompositionEngine/tests/OutputTest.cpp
+@@ -936,6 +936,44 @@ TEST_F(OutputUpdateAndWriteCompositionStateTest, forcesClientCompositionForAllLa
+     mOutput->writeCompositionState(args);
+ }
+ 
++// HY300: with a keystone homography every layer of the output is client composited, so nothing
++// (video planes, sideband, cursor) reaches the display without the correction.
++TEST_F(OutputUpdateAndWriteCompositionStateTest, keystoneForcesClientCompositionForAllLayers) {
++    InjectedLayer layer1;
++    InjectedLayer layer2;
++
++    uint32_t z = 0;
++    EXPECT_CALL(*layer1.outputLayer, updateCompositionState(false, true, ui::Transform::ROT_0, _));
++    EXPECT_CALL(*layer1.outputLayer,
++                writeStateToHWC(/*includeGeometry*/ false, /*skipLayer*/ false, z++,
++                                /*zIsOverridden*/ false, /*isPeekingThrough*/ false,
++                                /*hasLutsProperties*/ false));
++    EXPECT_CALL(*layer1.outputLayer, getOutput()).WillRepeatedly(ReturnRef(*mOutput));
++    EXPECT_CALL(*layer1.outputLayer, requiresClientComposition()).WillRepeatedly(Return(false));
++    EXPECT_CALL(*layer2.outputLayer, updateCompositionState(false, true, ui::Transform::ROT_0, _));
++    EXPECT_CALL(*layer2.outputLayer,
++                writeStateToHWC(/*includeGeometry*/ false, /*skipLayer*/ false, z++,
++                                /*zIsOverridden*/ false, /*isPeekingThrough*/ false,
++                                /*hasLutsProperties*/ false));
++    EXPECT_CALL(*layer2.outputLayer, getOutput()).WillRepeatedly(ReturnRef(*mOutput));
++    EXPECT_CALL(*layer2.outputLayer, requiresClientComposition()).WillRepeatedly(Return(false));
++
++    injectOutputLayer(layer1);
++    injectOutputLayer(layer2);
++
++    mOutput->editState().isEnabled = true;
++    mat4 keystone;
++    keystone[0][3] = 0.0005f; // perspective row
++    mOutput->editState().keystoneTransform = keystone;
++
++    CompositionRefreshArgs args;
++    args.updatingGeometryThisFrame = false;
++    args.forcedClientCompositionLayerStacks = {};
++    mOutput->updateCompositionState(args);
++    mOutput->planComposition();
++    mOutput->writeCompositionState(args);
++}
++
+ TEST_F(OutputUpdateAndWriteCompositionStateTest, peekThroughLayerChangesOrder) {
+     renderengine::mock::RenderEngine renderEngine;
+     InjectedLayer layer0;
+diff --git a/services/surfaceflinger/Keystone/tests/KeystoneMathTest.cpp b/services/surfaceflinger/Keystone/tests/KeystoneMathTest.cpp
+index 9168b30..e4591cc 100644
+--- a/services/surfaceflinger/Keystone/tests/KeystoneMathTest.cpp
++++ b/services/surfaceflinger/Keystone/tests/KeystoneMathTest.cpp
+@@ -158,6 +158,59 @@ TEST(KeystoneBuildMatrixTest, mirrorYFlagFlipsTheImage) {
+     expectPointNear({100.f, kHeight - 50.f}, mapPoint(*matrix, {100.f, 50.f}));
+ }
+ 
++// Teto traseiro do app (espelho vertical): lt 0,-720 lb 0,720 rt 0,-720 rb 0,720.
++TEST(KeystoneBuildMatrixTest, ceilingRearModeMirrorsVertically) {
++    Config config;
++    config.corners = {{0.f, -720.f}, {0.f, 720.f}, {0.f, -720.f}, {0.f, 720.f}};
++    const auto matrix = buildKeystoneMatrix(config, kWidth, kHeight);
++    ASSERT_TRUE(matrix.has_value());
++
++    expectPointNear({100.f, kHeight - 50.f}, mapPoint(*matrix, {100.f, 50.f}));
++}
++
++// Mesa traseira com ajuste do usuário: o app grava lt = 1260,-20 (base 1280,0 e o ajuste de
++// 20 px para dentro com o sinal do eixo espelhado). O canto de cima à esquerda da imagem cai
++// perto do canto de cima à direita do painel, 20 px (escalados) para dentro.
++TEST(KeystoneBuildMatrixTest, rearTableModeKeepsTheUserKeystone) {
++    Config config;
++    config.corners = {{1260.f, -20.f}, {1280.f, 0.f}, {-1280.f, 0.f}, {-1280.f, 0.f}};
++    const auto matrix = buildKeystoneMatrix(config, kWidth, kHeight);
++    ASSERT_TRUE(matrix.has_value());
++
++    const float dx = 20.f * kWidth / kLogicalWidth;
++    const float dy = 20.f * kHeight / kLogicalHeight;
++    expectPointNear({kWidth - dx, dy}, mapPoint(*matrix, {0.f, 0.f}));
++    expectPointNear({0.f, kHeight}, mapPoint(*matrix, {kWidth, kHeight}));
++}
++
++// Espelho nativo (persist.sys.keystone.mirror_x) junto com a homografia: a imagem é espelhada
++// antes e o resultado vai para o quadrilátero dos cantos.
++TEST(KeystoneBuildMatrixTest, mirrorFlagCombinesWithTheCorners) {
++    Config config;
++    config.corners.leftTop = {20.f, -20.f};
++    config.corners.rightTop = {-20.f, -20.f};
++    config.mirrorX = true;
++    const auto matrix = buildKeystoneMatrix(config, kWidth, kHeight);
++    ASSERT_TRUE(matrix.has_value());
++
++    const float dx = 20.f * kWidth / kLogicalWidth;
++    const float dy = 20.f * kHeight / kLogicalHeight;
++    // O canto de cima à esquerda da imagem vai para o canto de cima à direita do quadrilátero.
++    expectPointNear({kWidth - dx, dy}, mapPoint(*matrix, {0.f, 0.f}));
++    expectPointNear({dx, dy}, mapPoint(*matrix, {kWidth, 0.f}));
++    expectPointNear({kWidth, kHeight}, mapPoint(*matrix, {0.f, kHeight}));
++}
++
++TEST(KeystoneBuildMatrixTest, bothMirrorFlagsTurnTheImage) {
++    Config config;
++    config.mirrorX = true;
++    config.mirrorY = true;
++    const auto matrix = buildKeystoneMatrix(config, kWidth, kHeight);
++    ASSERT_TRUE(matrix.has_value());
++
++    expectPointNear({kWidth - 100.f, kHeight - 50.f}, mapPoint(*matrix, {100.f, 50.f}));
++}
++
+ // Cantos cruzados (quadrilátero em "laço") não têm homografia útil: fica sem keystone.
+ TEST(KeystoneBuildMatrixTest, crossedCornersAreRejected) {
+     Config config;

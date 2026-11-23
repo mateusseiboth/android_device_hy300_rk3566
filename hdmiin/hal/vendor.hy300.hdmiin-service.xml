@@ -1,0 +1,7 @@
+<manifest version="1.0" type="device">
+    <hal format="aidl">
+        <name>vendor.hy300.hdmiin</name>
+        <version>1</version>
+        <fqname>IHdmiCapture/default</fqname>
+    </hal>
+</manifest>

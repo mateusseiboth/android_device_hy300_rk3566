@@ -1,0 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Mateus Seiboth
+# SPDX-License-Identifier: Apache-2.0
+service vendor.hy300-hdmiin /vendor/bin/hw/vendor.hy300.hdmiin-service
+    interface aidl vendor.hy300.hdmiin.IHdmiCapture/default
+    class hal
+    user system
+    group system camera graphics

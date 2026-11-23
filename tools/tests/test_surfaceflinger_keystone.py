@@ -11,8 +11,10 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, ".."))
 import host_gtest  # noqa: E402
 
-PATCH = os.path.join(HERE, "..", "..", "patches", "frameworks", "native",
-                     "0001-surfaceflinger-keystone.patch")
+NATIVE = os.path.join(HERE, "..", "..", "patches", "frameworks", "native")
+PATCH = os.path.join(NATIVE, "0001-surfaceflinger-keystone.patch")
+# 0002: espelho com a homografia e composição pelo cliente (testes).
+MIRROR_PATCH = os.path.join(NATIVE, "0002-keystone-espelho-e-composicao-pelo-cliente-testes.patch")
 KEYSTONE = "services/surfaceflinger/Keystone"
 
 
@@ -25,7 +27,7 @@ def read_patch():
                      "sem compilador C++ ou gtest no host")
 class KeystoneMathTest(unittest.TestCase):
     def test_gtest_of_the_keystone_math_passes(self):
-        result = host_gtest.run(PATCH, [f"{KEYSTONE}/*"],
+        result = host_gtest.run([PATCH, MIRROR_PATCH], [f"{KEYSTONE}/*"],
                                 [f"{KEYSTONE}/KeystoneMath.cpp",
                                  f"{KEYSTONE}/tests/KeystoneMathTest.cpp"])
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
@@ -44,6 +46,13 @@ class KeystonePatchContentTest(unittest.TestCase):
 
     def test_keystone_change_invalidates_the_client_composition_cache(self):
         self.assertIn("+            lhs.keystoneTransform == rhs.keystoneTransform &&", read_patch())
+
+    def test_keystone_forces_every_layer_of_the_display_to_the_gpu(self):
+        self.assertIn("+                refreshArgs.forcedClientCompositionLayerStacks.contains(outputLayerStack) ||",
+                      read_patch())
+        self.assertIn("+                keystoneForcesClientComposition;", read_patch())
+        with open(MIRROR_PATCH) as handle:
+            self.assertIn("keystoneForcesClientCompositionForAllLayers", handle.read())
 
 
 if __name__ == "__main__":

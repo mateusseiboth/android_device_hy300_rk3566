@@ -31,10 +31,12 @@ def has_gtest(compiler):
 
 
 def extract(patch, includes, destination):
-    """Aplica só os caminhos `includes` (globs) do patch num diretório vazio."""
+    """Aplica só os caminhos `includes` (globs) do patch (ou da lista de patches, em ordem)
+    num diretório vazio."""
     args = ["git", "apply", *[f"--include={pattern}" for pattern in includes]]
-    subprocess.run([*args, os.path.abspath(patch)], cwd=destination, check=True,
-                   capture_output=True, text=True)
+    for one in ([patch] if isinstance(patch, str) else patch):
+        subprocess.run([*args, os.path.abspath(one)], cwd=destination, check=True,
+                       capture_output=True, text=True)
 
 
 @contextlib.contextmanager

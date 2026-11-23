@@ -1,0 +1,3 @@
+# App da entrada HDMI (io.github.hy300.hdmi): TV input de hardware e tela com o TvView. Público
+# para a política do vendor fazer dele cliente do serviço de captura.
+type hy300_hdmi_app, domain;

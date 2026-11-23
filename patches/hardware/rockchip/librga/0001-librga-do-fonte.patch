@@ -1,0 +1,62 @@
+HY300: librga compilada do fonte (modo android_ndk do CMakeLists.txt, só API por fd),
+em vez da librga.so dos blobs do vendor/rockchip.
+
+Android.bp | 51 +++++++++++++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 51 insertions(+)
+
+--- Changes ---
+
+Android.bp
+  @@ -14,3 +14,54 @@ cc_library_headers {
+  +
+  +// HY300: librga compilada do fonte (no Lineage-Rockchip ela vem dos blobs do vendor). Mesmo modo
+  +// do build "android_ndk" do CMakeLists.txt: sem o gralloc da Rockchip (-UANDROID -DLINUX), só a
+  +// API por fd (importbuffer_fd/improcess), que é o que o Codec2 usa.
+  +cc_library_shared {
+  +    name: "librga",
+  +    vendor: true,
+  +    srcs: [
+  +        "core/utils/android_utils/src/android_utils.cpp",
+  +        "core/utils/drm_utils/src/drm_utils.cpp",
+  +        "core/utils/utils.cpp",
+  +        "core/NormalRgaApi.cpp",
+  +        "core/RgaUtils.cpp",
+  +        "core/rga_sync.cpp",
+  +        "im2d_api/src/im2d_log.cpp",
+  +        "im2d_api/src/im2d_debugger.cpp",
+  +        "im2d_api/src/im2d_context.cpp",
+  +        "im2d_api/src/im2d_job.cpp",
+  +        "im2d_api/src/im2d_impl.cpp",
+  +        "im2d_api/src/im2d.cpp",
+  +        "core/RockchipRga.cpp",
+  +        "core/GrallocOps.cpp",
+  +        "core/NormalRga.cpp",
+  +        "core/RgaApi.cpp",
+  +        "core/RgaUtils_symbol.cpp",
+  +        "core/rga_gralloc.cpp",
+  +    ],
+  +    local_include_dirs: [
+  +        ".",
+  +        "im2d_api",
+  +        "include",
+  +        "core",
+  +        "core/hardware",
+  +        "core/utils",
+  +        "core/adapter",
+  +        "core/3rdparty/libdrm/include/drm",
+  +        "core/3rdparty/android_hal",
+  +    ],
+  +    export_include_dirs: [
+  +        "include",
+  +        "im2d_api",
+  +    ],
+  +    cflags: [
+  +        "-UANDROID",
+  +        "-DLINUX",
+  +        "-DANDROID_VNDK",
+  +        "-DLOG_TAG=\"librga\"",
+  +        "-Wno-error",
+  +    ],
+  +    shared_libs: ["liblog"],
+  +}
+  +51 -0

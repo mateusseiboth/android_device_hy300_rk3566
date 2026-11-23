@@ -1,0 +1,80 @@
+HY300: Codec2 da Rockchip com gralloc genérico (minigbm).
+O minigbm não conhece stride, formatos nem bits de uso privados da Rockchip (e recusa bit
+desconhecido). Com C2_RK_GENERIC_GRALLOC o decoder fica sempre em "buffer mode": o MPP decodifica
+nos buffers internos dele e cada quadro é copiado pela RGA (ou CPU) para um bloco
+YCBCR_420_888 (NV12 no minigbm) sem bits privados.
+
+diff --git a/component/base/Android.bp b/component/base/Android.bp
+index 471431b..f85525e 100644
+--- a/component/base/Android.bp
++++ b/component/base/Android.bp
+@@ -2,6 +2,9 @@ cc_defaults {
+     name: "libcodec2_rk-defaults",
+     defaults: ["libcodec2-impl-defaults"],
+ 
++    // HY300: gralloc genérico (minigbm) em vez do gralloc da Rockchip.
++    cflags: ["-DC2_RK_GENERIC_GRALLOC"],
++
+     header_libs: [
+         "libcodec2_rk_store_headers",
+     ],
+diff --git a/component/video/C2RKMpiDec.cpp b/component/video/C2RKMpiDec.cpp
+index 1f24cfa..f84f2c1 100644
+--- a/component/video/C2RKMpiDec.cpp
++++ b/component/video/C2RKMpiDec.cpp
+@@ -47,6 +47,20 @@ C2_LOGGER_ENABLE("C2RKMpiDec");
+ /* max support video resolution */
+ constexpr uint64_t kCpuReadWriteUsage = (GRALLOC_USAGE_SW_READ_OFTEN | GRALLOC_USAGE_SW_WRITE_OFTEN);
+ 
++#ifdef C2_RK_GENERIC_GRALLOC
++/*
++ * Gralloc genérico (minigbm): não conhece o stride, os formatos nem os bits de uso privados da
++ * Rockchip e recusa o buffer se receber um bit desconhecido. Nesse caso o MPP decodifica nos
++ * buffers internos dele e a saída é copiada (RGA, ou CPU se a RGA falhar) para um bloco NV12
++ * comum (YCBCR_420_888, que o minigbm resolve para NV12).
++ */
++constexpr bool kGenericGralloc = true;
++constexpr uint64_t kGenericUsageMask = 0x0FFFFFFFULL;
++#else
++constexpr bool kGenericGralloc = false;
++constexpr uint64_t kGenericUsageMask = ~0ULL;
++#endif
++
+ constexpr uint32_t kMaxVideoWidth = 8192;
+ constexpr uint32_t kMaxVideoHeight = 4320;
+ 
+@@ -1434,6 +1448,10 @@ c2_status_t C2RKMpiDec::updateDecoderArgs(const std::shared_ptr<C2BlockPool> &po
+             }
+         }
+ 
++        if (kGenericGralloc) {
++            bufferMode = true;
++        }
++
+         mBufferMode  = bufferMode;
+         mBlockPool   = pool;
+         mWidth       = width;
+@@ -1745,7 +1763,7 @@ c2_status_t C2RKMpiDec::initDecoder(const std::unique_ptr<C2Work> &work) {
+         goto error;
+     }
+ 
+-    if (!mDumpService->hasFeatures(C2_FEATURE_DEC_INTERNAL_BUFFER_GROUP)) {
++    if (!kGenericGralloc && !mDumpService->hasFeatures(C2_FEATURE_DEC_INTERNAL_BUFFER_GROUP)) {
+         err = mpp_buffer_group_get_external(&mBufferGroup, MPP_BUFFER_TYPE_ION);
+         if (err != MPP_OK) {
+             Log.PostError("getMppBufferGroup", static_cast<int32_t>(err));
+@@ -2536,6 +2554,14 @@ c2_status_t C2RKMpiDec::ensureDecoderState() {
+             bUsage |= RK_GRALLOC_USAGE_WITHIN_4G;
+         }
+ 
++        if (kGenericGralloc) {
++            usage &= kGenericUsageMask;
++            bUsage &= kGenericUsageMask;
++            if (bFormat == HAL_PIXEL_FORMAT_YCrCb_NV12) {
++                bFormat = HAL_PIXEL_FORMAT_YCBCR_420_888;
++            }
++        }
++
+         if (mOutBlock &&
+                 (mOutBlock->width() != bWidth || mOutBlock->height() != bHeight)) {
+             mOutBlock.reset();

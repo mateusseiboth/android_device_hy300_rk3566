@@ -15,7 +15,7 @@
 # Fica em build/tasks porque INSTALLED_2NDBOOTLOADER_TARGET ainda não existe quando os
 # Android.mk são lidos.
 ifeq ($(TARGET_DEVICE),hy300)
-HY300_RESOURCE_IMG := device/hy300/rk3566/prebuilt/resource.img
+HY300_RESOURCE_IMG := device/txcz/hy300/prebuilt/resource.img
 
 $(INSTALLED_2NDBOOTLOADER_TARGET): $(HY300_RESOURCE_IMG)
 	$(hide) mkdir -p $(dir $@)

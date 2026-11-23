@@ -6,9 +6,10 @@
 # Vendor storage da Rockchip (id 50 = modo de instalação, lido pelo U-Boot para girar o logo)
 /dev/vendor_storage       0660   system     system
 
-# Decodificador/codificador de vídeo da Rockchip (mpp_service) e RGA
-/dev/mpp_service          0660   media      media
-/dev/rga                  0660   system     graphics
+# Decodificador/codificador de vídeo da Rockchip (mpp_service) e RGA: o serviço Codec2
+# (android.hardware.media.c2@1.1-service, usuário mediacodec, grupo system) usa os dois.
+/dev/mpp_service          0660   system     system
+/dev/rga                  0660   system     system
 
 # Entrada HDMI (RK628 -> rkcif/rkisp): para o HAL de TV input/câmera
 /dev/video*               0660   system     camera

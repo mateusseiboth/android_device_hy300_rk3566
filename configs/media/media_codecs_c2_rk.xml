@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!--
+    SPDX-FileCopyrightText: 2026 Mateus Seiboth
+    SPDX-License-Identifier: Apache-2.0
+
+    Decodificadores por hardware do RK3566 (MPP: rkvdec2 para H.264/HEVC/VP9, vdpu para VP8,
+    MPEG-2, MPEG-4 e H.263), servidos pelo Codec2 da Rockchip (hardware/rockchip/codec2).
+    O RK3566 decodifica H.264/HEVC/VP9 até 4K60, mas aqui o limite é 1920x1088: o painel é
+    1024x600 e os buffers de 4K (DPB de até 16 quadros NV12) não cabem bem em 1,5 GB de RAM.
+    Sem encoders por enquanto: o caminho de entrada do encoder usa bits de uso do gralloc da
+    Rockchip que o minigbm não aceita.
+-->
+<Included>
+    <Decoders>
+        <MediaCodec name="c2.rk.avc.decoder" type="video/avc">
+            <Limit name="size" min="2x2" max="1920x1088" />
+            <Limit name="alignment" value="2x2" />
+            <Limit name="block-size" value="16x16" />
+            <Limit name="block-count" range="1-8160" />
+            <Limit name="blocks-per-second" range="1-489600" />
+            <Limit name="frame-rate" range="1-60" />
+            <Limit name="bitrate" range="1-40000000" />
+            <Feature name="adaptive-playback" />
+            <Limit name="concurrent-instances" max="4" />
+            <Limit name="performance-point-1920x1088" value="60" />
+        </MediaCodec>
+        <MediaCodec name="c2.rk.hevc.decoder" type="video/hevc">
+            <Limit name="size" min="2x2" max="1920x1088" />
+            <Limit name="alignment" value="2x2" />
+            <Limit name="block-size" value="16x16" />
+            <Limit name="block-count" range="1-8160" />
+            <Limit name="blocks-per-second" range="1-489600" />
+            <Limit name="frame-rate" range="1-60" />
+            <Limit name="bitrate" range="1-40000000" />
+            <Feature name="adaptive-playback" />
+            <Limit name="concurrent-instances" max="4" />
+            <Limit name="performance-point-1920x1088" value="60" />
+        </MediaCodec>
+        <MediaCodec name="c2.rk.vp9.decoder" type="video/x-vnd.on2.vp9">
+            <Limit name="size" min="320x180" max="1920x1088" />
+            <Limit name="alignment" value="2x2" />
+            <Limit name="block-size" value="16x16" />
+            <Limit name="block-count" range="1-8160" />
+            <Limit name="blocks-per-second" range="1-489600" />
+            <Limit name="frame-rate" range="1-60" />
+            <Limit name="bitrate" range="1-40000000" />
+            <Feature name="adaptive-playback" />
+            <Limit name="concurrent-instances" max="4" />
+            <Limit name="performance-point-1920x1088" value="60" />
+        </MediaCodec>
+        <MediaCodec name="c2.rk.vp8.decoder" type="video/x-vnd.on2.vp8">
+            <Limit name="size" min="2x2" max="1920x1088" />
+            <Limit name="alignment" value="2x2" />
+            <Limit name="block-size" value="16x16" />
+            <Limit name="block-count" range="1-8160" />
+            <Limit name="blocks-per-second" range="1-489600" />
+            <Limit name="frame-rate" range="1-60" />
+            <Limit name="bitrate" range="1-40000000" />
+            <Feature name="adaptive-playback" />
+            <Limit name="concurrent-instances" max="4" />
+            <Limit name="performance-point-1920x1088" value="60" />
+        </MediaCodec>
+        <MediaCodec name="c2.rk.mpeg2.decoder" type="video/mpeg2">
+            <Limit name="size" min="2x2" max="1920x1088" />
+            <Limit name="alignment" value="2x2" />
+            <Limit name="block-size" value="16x16" />
+            <Limit name="block-count" range="1-8160" />
+            <Limit name="blocks-per-second" range="1-489600" />
+            <Limit name="frame-rate" range="1-60" />
+            <Limit name="bitrate" range="1-40000000" />
+            <Feature name="adaptive-playback" />
+            <Limit name="concurrent-instances" max="4" />
+            <Limit name="performance-point-1920x1088" value="60" />
+        </MediaCodec>
+        <MediaCodec name="c2.rk.m4v.decoder" type="video/mp4v-es">
+            <Limit name="size" min="2x2" max="1920x1088" />
+            <Limit name="alignment" value="2x2" />
+            <Limit name="block-size" value="16x16" />
+            <Limit name="block-count" range="1-8160" />
+            <Limit name="blocks-per-second" range="1-489600" />
+            <Limit name="frame-rate" range="1-60" />
+            <Limit name="bitrate" range="1-40000000" />
+            <Feature name="adaptive-playback" />
+            <Limit name="concurrent-instances" max="4" />
+            <Limit name="performance-point-1920x1088" value="60" />
+        </MediaCodec>
+        <MediaCodec name="c2.rk.h263.decoder" type="video/3gpp">
+            <Limit name="size" min="2x2" max="1920x1088" />
+            <Limit name="alignment" value="2x2" />
+            <Limit name="block-size" value="16x16" />
+            <Limit name="block-count" range="1-8160" />
+            <Limit name="blocks-per-second" range="1-489600" />
+            <Limit name="frame-rate" range="1-60" />
+            <Limit name="bitrate" range="1-40000000" />
+            <Feature name="adaptive-playback" />
+            <Limit name="concurrent-instances" max="4" />
+            <Limit name="performance-point-1920x1088" value="60" />
+        </MediaCodec>
+    </Decoders>
+</Included>

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!--
+    SPDX-FileCopyrightText: 2026 Mateus Seiboth
+    SPDX-License-Identifier: Apache-2.0
+
+    Lista de codecs do vendor. Os codecs de software (c2.android.*) vêm do APEX
+    com.android.media.swcodec e entram sozinhos; aqui só os de hardware.
+-->
+<MediaCodecs>
+    <Include href="media_codecs_c2_rk.xml" />
+</MediaCodecs>

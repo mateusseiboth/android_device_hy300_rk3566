@@ -1,22 +1,35 @@
-# device/hy300/rk3566: LineageOS 24.0 (Android 17) para o projetor HY300
+# device/txcz/hy300: LineageOS 24.0 (Android 17) para o projetor HY300
 
-Esqueleto da árvore de dispositivo do HY300 (Rockchip RK3566, 1,5 GB de RAM, painel LVDS
-1024x600, TXCZ y356tx). Ainda **não compila**: faltam o Mesa com Panfrost, os HALs de
-áudio, Bluetooth, KeyMint e sensores, a política SELinux e o patch de keystone. O plano, o
-inventário do aparelho e os riscos estão em `docs/lineageos.md` do repositório do projeto
-(`hy300-rk3566`). Aqui fica só o porquê de cada arquivo.
+Árvore de dispositivo do HY300 (Rockchip RK3566, 1,5 GB de RAM, painel LVDS 1024x600, TXCZ
+y356tx): LineageOS para TV, 64 bits, low-RAM, FCM 8, GPU aberta (Mesa Panfrost + drm_hwcomposer +
+minigbm) e vídeo por hardware (Codec2 da Rockchip sobre o MPP). O plano, o inventário do aparelho,
+como gravar e os riscos estão em `docs/lineageos.md` do repositório do projeto (`hy300-rk3566`).
+Aqui fica só o porquê de cada arquivo.
 
 Nenhum binário proprietário entra neste repositório. `prebuilt/` é ignorado pelo git.
 
-## Como usar (quando o checkout terminar)
+## Como compilar
+
+O caminho é `device/txcz/hy300` (o build procura o `BoardConfig.mk` em
+`device/*/<PRODUCT_DEVICE>`; link simbólico não serve, o finder do Soong não segue). Os projetos
+de fora vêm do local_manifest do projeto (`hy300.xml`: esta árvore, o repositório do projeto
+`hy300-rk3566` em `vendor/hy300/hy300-rk3566` com o app de configurações e a animação de boot,
+aospext, codec2, libmpp, librga, libhardware_rockchip). `hy300-prune.xml` tira do checkout o
+que o HY300 não usa (CTS, Qualcomm, Cuttlefish, carro) para a análise do Soong caber em 31 GB.
 
 ```sh
-# a árvore vai para device/hy300/rk3566 do checkout do lineage-24.0
-ln -s ~/android/device-hy300 ~/android/lineage/device/hy300/rk3566   # ou clonar ali
-# prebuilt/ (ver abaixo), depois:
+cd ~/android/lineage
+repo sync -c device/txcz/hy300 vendor/hy300/hy300-rk3566 vendor/glodroid/aospext hardware/rockchip/codec2 \
+    hardware/rockchip/libmpp hardware/rockchip/librga hardware/rockchip/libhardware_rockchip
+device/txcz/hy300/tools/apply_patches.py .            # patches/ nos projetos de fora
+device/txcz/hy300/tools/build-mesa-host-tools.sh .    # mesa_clc e panfrost_compile (host)
+export PATH="$HOME/hy300-work/mesa-host/install/bin:$PATH"
+export ALLOW_MISSING_DEPENDENCIES=true GOMEMLIMIT=20GiB SOONG_INCREMENTAL_ANALYSIS=false
+# prebuilt/: kernel/build-lineage-kernel.sh do repositório do projeto (ver abaixo)
 source build/envsetup.sh
-breakfast hy300            # = lunch lineage_hy300-cp2a-userdebug
-python3 -I -m unittest discover -s device/hy300/rk3566/tools/tests
+lunch lineage_hy300-cp2a-userdebug                    # = breakfast hy300
+m -j12
+python3 -I -m unittest discover -s device/txcz/hy300/tools/tests
 ```
 
 ## Arquivos
@@ -25,7 +38,7 @@ python3 -I -m unittest discover -s device/hy300/rk3566/tools/tests
 |---|---|---|
 | `AndroidProducts.mk` | lista de produtos | um produto só, `lineage_hy300`; a release `cp2a` vem de `vendor/lineage/vars/aosp_target_release` |
 | `lineage_hy300.mk` | produto | Android TV do LineageOS: `atv_base.mk` + `common_full_tv.mk` (que traz `device/lineage/atv`, TvSettingsTwoPanel, LeanbackIME e o launcher Catapult), mais `atv_lowram_defaults.mk` para 1,5 GB. Mesmo esquema dos aparelhos ATV do Lineage |
-| `device.mk` | pacotes, cópias, props | só 64 bits (`core_64_bit_only.mk`, um zygote); `PRODUCT_SHIPPING_API_LEVEL := 31` (Android 12 de fábrica); gráficos abertos (drm_hwcomposer hwc3 + minigbm; Mesa ainda por vir) |
+| `device.mk` | pacotes, cópias, props | só 64 bits (`core_64_bit_only.mk`, um zygote); `PRODUCT_SHIPPING_API_LEVEL := 31` (Android 12 de fábrica); gráficos abertos, Codec2/MPP, KeyMint/Gatekeeper/health por software, lmkd |
 | `BoardConfig.mk` | placa | ver "Boot" e "Partições" |
 | `configs/init/fstab.rk3566` | fstab | derivado do `fstab.rk30board` de fábrica (diferenças no topo do arquivo) |
 | `configs/init/init.rk3566.rc` | init da placa | `mount_all`, zram, permissões do motor de foco (`/sys/class/motor_cc`) e dos LEDs para o app de configurações (uid system) |
@@ -34,6 +47,48 @@ python3 -I -m unittest discover -s device/hy300/rk3566/tools/tests
 | `keylayout/fdd70030_pwm.kl` | controle IR | escrito a partir das tabelas IR do DT do 6.1; F6 = entrada HDMI, F12 = configurações do projetor |
 | `build/tasks/resource_img.mk` | resource.img | copia `prebuilt/resource.img` para a seção `second` |
 | `tools/mkbootimg_hy300.py` | wrapper do mkbootimg | recalcula o ID SHA-1 que o U-Boot confere (testes em `tools/tests/`) |
+| `tools/apply_patches.py` | patches nos projetos de fora | `patches/<caminho>/NNNN-*.patch` com `git apply`; idempotente; rodar depois de cada `repo sync` |
+| `tools/build-mesa-host-tools.sh` | ferramentas de host do Mesa | `mesa_clc`, `vtn_bindgen2` e `panfrost_compile` da mesma fonte do `external/mesa3d`, com LLVM 22 |
+| `configs/media/` | lista de codecs | `c2.rk.*` (H.264, HEVC, VP9, VP8, MPEG-2, MPEG-4, H.263) até 1920x1088 |
+| `patches/hardware/rockchip/codec2` | Codec2 da Rockchip | sem blobs do vendor e sem NPU (0001); gralloc genérico: decodifica nos buffers do MPP e copia pela RGA para NV12 do minigbm (0002) |
+| `patches/hardware/rockchip/librga` | librga | compilada do fonte, só a API por fd (no Lineage-Rockchip ela vem dos blobs) |
+
+## Gráficos
+
+- **Mesa 26.1 do próprio `external/mesa3d`** compilado com meson pelo aospext do GloDroid
+  (`BOARD_BUILD_AOSPEXT_MESA3D`), só o driver `panfrost`. O `Android.bp` do Mesa no AOSP 17 só
+  monta o gfxstream. `drm.gpu.vendor_name=panfrost` faz o EGL abrir o nó do Panfrost.
+- **Panfrost é módulo** no kernel (`prebuilt/modules`): o `init.rk3566.rc` carrega no
+  `early-init`, antes do allocator e do composer.
+- **minigbm "generic"** sem patch: o rockchip é driver dumb no minigbm, e o kernel Android
+  permite `CREATE_DUMB` no render node. O Panfrost importa os buffers por dma-buf.
+- **drm_hwcomposer** (HWC3) do AOSP, no `card0` (VOP2, LVDS).
+
+## Vídeo por hardware
+
+Codec2 da Rockchip (`android.hardware.media.c2@1.1-service`, componentes `c2.rk.*`) sobre o MPP
+do fonte (`/dev/mpp_service`). O gralloc é o minigbm, que não aceita o stride, os formatos e os
+bits de uso privados da Rockchip; por isso (patch 0002) o decoder trabalha sempre em "buffer
+mode": o MPP decodifica nos buffers dele e cada quadro é copiado pela RGA para um bloco NV12 comum.
+Custa uma cópia por quadro na RGA, irrelevante em 1080p. Sem 10 bits por enquanto (HEVC Main10,
+VP9 perfil 2 vão para software) e sem encoders.
+
+## App de configurações e animação de boot
+
+Os dois vêm do repositório do projeto (`vendor/hy300/hy300-rk3566`), compilados do fonte pelos
+`Android.bp` de lá: `HY300Settings` (priv-app no `/product`, chave de plataforma; o TvSettings
+mostra o item "Projetor" porque o app trata `com.android.tv.settings.SOUND`) e `hy300-bootlog`
+(o serviço `bootanim` vira o terminal com o logcat ao vivo; `ro.product.bootanim.file` escolhe o
+zip de 1 quadro com o logo). O `init.rk3566.rc` dá ao app o motor de foco e os LEDs (0666, como a
+fábrica).
+
+## Desempenho e memória
+
+- `init.rk3566.rc`: CPU no governador `performance` (vale quando o kernel tiver cpufreq), GPU
+  (devfreq do Panfrost) e DDR (`dmc`) em `performance`; o térmico do kernel limita por cima.
+- lmkd por PSI com limites que poupam o app em primeiro plano (`device.mk`); zram 75 % lz4.
+
+
 
 ## Boot
 
@@ -73,16 +128,21 @@ Sem A/B (a fábrica não é A/B). Sem `vendor_dlkm`/`odm_dlkm`: os módulos vão
 
 ## prebuilt/ (fora do git)
 
-| Arquivo | De onde vem |
+Gerado por `kernel/build-lineage-kernel.sh` do repositório do projeto (`hy300-rk3566`): compila
+um commit fixo do `hy300-ack-6.1` a partir de um `git archive`, confere os requisitos do FCM 8 e
+instala aqui. `prebuilt/VERSION` guarda o commit e os sha256.
+
+| Arquivo | O que é |
 |---|---|
-| `Image.gz` | build do kernel `hy300-ack-6.1` (`KBASE=ack kernel/build-marco1.sh` no repositório do projeto, saída em `~/hy300-work/kbuild-ack-6.1`; depois `gzip -9 -n arch/arm64/boot/Image`) |
-| `dtb/*.dtb` | qualquer DTB: a seção dtb do header v2 é exigida pelo mkbootimg, mas o U-Boot não a usa. Usar o `rk3566-hy300.dtb` do build |
-| `resource.img` | a seção `second` do `boot.img` do próprio aparelho, já com o logo da capivara: `tools/mkboot.py unpack ~/hy300-backup/boot.img /tmp/boot` (repositório do projeto) e copiar o arquivo da seção second |
+| `Image.gz` | kernel com o DT do HY300 embutido, `gzip -9` reproduzível |
+| `dtb/rk3566-hy300.dtb` | seção dtb do header v2 (o mkbootimg exige; o U-Boot não usa) |
+| `resource.img` | seção `second` do `boot.img` de fábrica (logo + `rk-kernel.dtb` de fábrica) |
+| `modules/*.ko` | `drm_shmem_helper`, `gpu-sched`, `panfrost` |
 
 ## O que falta (ordem em `docs/lineageos.md`)
 
-1. Kernel com as configs do Android (binder, ashmem, SELinux, BPF, netfilter etc.).
-2. Mesa com Panfrost (aospext do GloDroid) e o primeiro boot até a tela.
-3. sepolicy própria; áudio; Bluetooth; KeyMint/Gatekeeper por software; sensores.
+1. Primeiro boot no aparelho (pelo Alpine de recuperação).
+2. Wi-Fi AIC8800 no kernel Android, áudio, Bluetooth, sensores.
+3. Vídeo 10 bits e encoders no caminho do minigbm; sepolicy própria (hoje permissive).
 4. Keystone no SurfaceFlinger (mesmas props `persist.sys.keystone.*`), app de configurações
    como app de plataforma, entrada HDMI (RK628).

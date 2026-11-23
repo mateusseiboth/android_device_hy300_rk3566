@@ -7,6 +7,10 @@ on early-init
     write /sys/block/zram0/comp_algorithm lz4
     write /proc/sys/vm/swappiness 100
 
+    # GPU Mali-G52: o Panfrost é módulo no kernel Android (hy300-ack-6.1). Tem que estar
+    # carregado antes do allocator, do composer e do SurfaceFlinger (classe core/hal).
+    exec u:r:vendor_modprobe:s0 -- /vendor/bin/modprobe -a -d /vendor/lib/modules drm_shmem_helper gpu-sched panfrost
+
 on fs
     mount_all /vendor/etc/fstab.rk3566 --early
 
@@ -19,22 +23,24 @@ on post-fs-data
     mkdir /data/vendor/wifi/wpa/sockets 0770 wifi wifi
 
 on boot
-    # CPU: schedutil (o 4.19 de fábrica usava interactive, que não existe no 6.1)
-    write /sys/devices/system/cpu/cpufreq/policy0/scaling_governor schedutil
+    # Desempenho primeiro (vídeo em streaming engasgava na fábrica). CPU no governador
+    # performance: com o driver de cpufreq e a tabela OPP do DT ela fica no máximo nominal
+    # (1,8 GHz); sem o driver (kernel atual), as escritas falham sem efeito. A proteção térmica
+    # é do kernel (thermal zones do DT) e limita a frequência por cima do governador.
+    write /sys/devices/system/cpu/cpufreq/policy0/scaling_governor performance
 
-    # Motor de foco: o app io.github.hy300.settings (uid system) escreve user_cw,
-    # user_ccw, aastop etc. e lê o fim de curso. Mesmo caminho da fábrica, que dava 0777.
-    chown system system /sys/class/motor_cc/motor_cc/motor
-    chmod 0660 /sys/class/motor_cc/motor_cc/motor
-    chown system system /sys/class/motor_cc/motor_cc/hd_camera_on
-    chmod 0440 /sys/class/motor_cc/motor_cc/hd_camera_on
+    # GPU (devfreq do Panfrost) e DDR (dmc) no máximo.
+    write /sys/class/devfreq/fde60000.gpu/governor performance
+    write /sys/class/devfreq/dmc/governor performance
 
-    # LEDs indicadores, que o app liga e desliga. Ventoinha (Fan_h) e fonte de luz
-    # (Lcd_power) ficam só para root: desligar a ventoinha com a luz acesa aquece o projetor.
-    chown system system /sys/class/leds/green/brightness
-    chmod 0664 /sys/class/leds/green/brightness
-    chown system system /sys/class/leds/red/brightness
-    chmod 0664 /sys/class/leds/red/brightness
+    # Motor de foco e LEDs indicadores, que o app io.github.hy300.settings (priv-app, uid de app,
+    # não system) usa. Mesmas permissões da fábrica (motor 0777, LEDs 0666 pelo hy300-settings.rc).
+    # Ventoinha (Fan_h) e fonte de luz (Lcd_power) ficam só para root: desligar a ventoinha com a
+    # luz acesa aquece o projetor.
+    chmod 0666 /sys/class/motor_cc/motor_cc/motor
+    chmod 0444 /sys/class/motor_cc/motor_cc/hd_camera_on
+    chmod 0666 /sys/class/leds/green/brightness
+    chmod 0666 /sys/class/leds/red/brightness
 
     # Bluetooth AIC8800 (UART1 = ttyS1; a permissão do nó está no ueventd)
     chown bluetooth bluetooth /sys/class/rfkill/rfkill0/state

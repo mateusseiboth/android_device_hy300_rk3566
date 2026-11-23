@@ -1,0 +1,54 @@
+HY300: Codec2 da Rockchip só com fonte.
+- o namespace não importa mais vendor/rockchip/rk35xx-common (blobs): a libmpp vem do fonte
+  (hardware/rockchip/libmpp);
+- sem NPU: os modelos yolov5 .rknn não são instalados; sem librknnrt.so o modo "smart v3" do
+  encoder cai no modo normal. Decodificação não muda.
+
+diff --git a/Android.bp b/Android.bp
+index f65b24a..e82a166 100644
+--- a/Android.bp
++++ b/Android.bp
+@@ -1,7 +1,8 @@
+ soong_namespace {
+     imports: [
++        // HY300: libmpp vem do fonte (hardware/rockchip/libmpp, namespace raiz), não dos
++        // blobs do vendor/rockchip/rk35xx-common.
+         "hardware/rockchip/librga",
+-        "vendor/rockchip/rk35xx-common",
+     ],
+ }
+ 
+diff --git a/component/video/yolov5/Android.bp b/component/video/yolov5/Android.bp
+index d6aed01..ad49f24 100644
+--- a/component/video/yolov5/Android.bp
++++ b/component/video/yolov5/Android.bp
+@@ -1,17 +1,3 @@
+-prebuilt_etc {
+-    name: "yolov5n_seg_for3576.rknn",
+-    src: "model/yolov5n_seg_for3576.rknn",
+-    sub_dir: "rknn",
+-    vendor: true,
+-}
+-
+-prebuilt_etc {
+-    name: "yolov5n_seg_for3588.rknn",
+-    src: "model/yolov5n_seg_for3588.rknn",
+-    sub_dir: "rknn",
+-    vendor: true,
+-}
+-
+ cc_library_static {
+     name: "libcodec2_rk_yolov5_session",
+     vendor: true,
+@@ -49,8 +35,7 @@ cc_library_static {
+         "include/rknpu2",
+     ],
+ 
+-    required: [
+-        "yolov5n_seg_for3576.rknn",
+-        "yolov5n_seg_for3588.rknn",
+-    ],
++    // HY300: sem NPU. Os modelos .rknn (binários, só RK3576/RK3588) não entram na imagem e o
++    // librknnrt.so não existe no aparelho: o dlopen falha e o modo "smart v3" do encoder volta
++    // para o modo normal. A decodificação não usa nada disto.
+ }

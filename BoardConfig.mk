@@ -7,7 +7,7 @@
 # boot.img de fábrica. Ver docs/lineageos.md no repositório do projeto.
 #
 
-DEVICE_PATH := device/hy300/rk3566
+DEVICE_PATH := device/txcz/hy300
 
 # Arquitetura: só 64 bits (core_64_bit_only.mk no device.mk). A55 x4.
 TARGET_ARCH := arm64
@@ -91,6 +91,8 @@ BOARD_SUPER_PARTITION_GROUPS := rockchip_dynamic_partitions
 BOARD_ROCKCHIP_DYNAMIC_PARTITIONS_SIZE := 3258974208
 BOARD_ROCKCHIP_DYNAMIC_PARTITIONS_PARTITION_LIST := system system_ext product vendor odm
 AB_OTA_UPDATER := false
+# super.img (sparse) no próprio `m`, para gravar pelo Alpine (simg2img antes do dd).
+BOARD_BUILD_SUPER_IMAGE_BY_DEFAULT := true
 
 BOARD_SYSTEMIMAGE_FILE_SYSTEM_TYPE := ext4
 BOARD_SYSTEM_EXTIMAGE_FILE_SYSTEM_TYPE := ext4
@@ -125,6 +127,24 @@ WPA_SUPPLICANT_VERSION := VER_0_8_X
 BOARD_WPA_SUPPLICANT_DRIVER := NL80211
 BOARD_HOSTAPD_DRIVER := NL80211
 WIFI_DRIVER_SOCKET_IFACE := wlan0
+
+# Módulos do kernel no /vendor/lib/modules (prebuilt/modules, gerados junto com a Image pelo
+# kernel/build-lineage-kernel.sh do projeto). Hoje: Panfrost e dependências (a GPU é módulo no
+# hy300-ack-6.1). O init.rk3566.rc carrega antes do composer.
+BOARD_VENDOR_KERNEL_MODULES := $(sort $(wildcard $(DEVICE_PATH)/prebuilt/modules/*.ko))
+
+# Gráficos: Mesa com Panfrost (Mali-G52), compilado com meson pelo aospext do GloDroid
+# (vendor/glodroid/aospext, local_manifest) a partir do external/mesa3d do próprio AOSP 17
+# (Mesa 26.1). O Android.bp do external/mesa3d só monta o gfxstream, por isso o aospext.
+# O Panfrost do Mesa 26 tem kernels OpenCL pré-compilados (libpan): mesa_clc, vtn_bindgen2 e
+# panfrost_compile vêm do host, compilados da MESMA fonte pelo tools/build-mesa-host-tools.sh
+# (o PATH do build precisa deles; ver README.md).
+BOARD_BUILD_AOSPEXT_MESA3D := true
+BOARD_MESA3D_SRC_DIR := external/mesa3d
+BOARD_MESA3D_GALLIUM_DRIVERS := panfrost
+BOARD_MESA3D_VULKAN_DRIVERS :=
+BOARD_MESA3D_EXTRA_MESON_ARGS := -Dmesa-clc=system -Dprecomp-compiler=system \
+    -Doptimization=2 -Db_ndebug=true
 
 # SELinux: começa permissive (cmdline). A política própria (sysfs do motor e dos LEDs,
 # props persist.sys.keystone.* e persist.txcz.*) entra num marco próprio.

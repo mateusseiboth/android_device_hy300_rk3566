@@ -14,7 +14,7 @@ $(call inherit-product, device/google/atv/products/atv_lowram_defaults.mk)
 
 $(call inherit-product, device/google/atv/products/atv_base.mk)
 $(call inherit-product, vendor/lineage/config/common_full_tv.mk)
-$(call inherit-product, device/hy300/rk3566/device.mk)
+$(call inherit-product, device/txcz/hy300/device.mk)
 
 PRODUCT_NAME := lineage_hy300
 PRODUCT_DEVICE := hy300

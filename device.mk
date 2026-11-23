@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 
-DEVICE_PATH := device/hy300/rk3566
+DEVICE_PATH := device/txcz/hy300
 
 # Só 64 bits: um zygote só (zygote64) cabe melhor em 1,5 GB que o par 64/32.
 $(call inherit-product, $(SRC_TARGET_DIR)/product/core_64_bit_only.mk)
@@ -37,32 +37,89 @@ PRODUCT_COPY_FILES += \
 PRODUCT_COPY_FILES += \
     $(DEVICE_PATH)/keylayout/fdd70030_pwm.kl:$(TARGET_COPY_OUT_VENDOR)/usr/keylayout/fdd70030_pwm.kl
 
-# Memória: zram vem do fstab (swapon_all no init.rk3566.rc). heapsize/growthlimit e lmkd
-# vêm do atv_lowram_defaults.mk (go_defaults_common.prop), os mesmos valores da fábrica.
+# Memória (1,5 GB): zram de 75 % com lz4 (fstab + init.rk3566.rc). lmkd por PSI, com limites
+# que poupam o app em primeiro plano (vídeo): mata cedo os de segundo plano (kill_heaviest_task,
+# thrashing_limit baixo) e só fica crítico com stall completo longo. heapsize/growthlimit vêm do
+# atv_lowram_defaults.mk.
 PRODUCT_VENDOR_PROPERTIES += \
     ro.lmk.use_psi=true \
-    ro.lmk.swap_free_low_percentage=20
+    ro.lmk.use_minfree_levels=false \
+    ro.lmk.kill_heaviest_task=true \
+    ro.lmk.psi_partial_stall_ms=200 \
+    ro.lmk.psi_complete_stall_ms=700 \
+    ro.lmk.thrashing_limit=30 \
+    ro.lmk.thrashing_limit_decay=50 \
+    ro.lmk.swap_util_max=90 \
+    ro.lmk.swap_free_low_percentage=10
 
-# Gráficos abertos (Mesa Panfrost + drm_hwcomposer + minigbm). Nomes conferidos nos
-# Android.bp do android-17.0.0_r1. O Mesa com Panfrost não é compilado pelo
-# external/mesa3d do AOSP 17 (só gfxstream): entra pelo aospext do GloDroid num marco
-# próprio (local_manifest), e só então estes pacotes passam a ter sentido.
+# Gráficos abertos: Mesa Panfrost (aospext, ver BoardConfig.mk) + drm_hwcomposer (HWC3) +
+# minigbm. O minigbm "generic" usa o driver dumb no nó do rockchip (o ACK libera
+# CREATE_DUMB no render node) e o Panfrost importa por dma-buf. O EGL do Mesa escolhe o nó do
+# Panfrost por drm.gpu.vendor_name.
 $(call soong_config_set,minigbm,platform,generic)
 PRODUCT_PACKAGES += \
     android.hardware.composer.hwc3-service.drm \
     android.hardware.graphics.allocator-service.minigbm \
-    mapper.minigbm
+    mapper.minigbm \
+    libEGL_mesa \
+    libGLESv1_CM_mesa \
+    libGLESv2_mesa \
+    libgallium_dri
 PRODUCT_VENDOR_PROPERTIES += \
-    ro.hardware.hwcomposer=drm \
-    ro.hardware.gralloc=minigbm \
-    ro.opengles.version=196610
-# TODO(marco gráficos): libs do Mesa via aospext e ro.hardware.egl=mesa,
-# ro.hardware.vulkan=panfrost.
+    ro.hardware.egl=mesa \
+    drm.gpu.vendor_name=panfrost \
+    ro.opengles.version=196609 \
+    debug.renderengine.backend=skiaglthreaded \
+    ro.surface_flinger.max_frame_buffer_acquired_buffers=3
+
+# Vídeo por hardware: Codec2 da Rockchip (hardware/rockchip/codec2) sobre o MPP
+# (hardware/rockchip/libmpp, kernel mpp_service), com cópia pela RGA (librga) para os buffers do
+# minigbm. Tudo compilado do fonte; os patches que a árvore aplica estão em patches/. Os codecs
+# de software do AOSP continuam disponíveis (APEX swcodec) para o que o hardware não cobre.
+# O Codec2 e a librga ficam em namespaces do Soong: sem eles aqui, os módulos não chegam ao Make
+# (e, com ALLOW_MISSING_DEPENDENCIES, sumiriam da imagem sem erro).
+PRODUCT_SOONG_NAMESPACES += \
+    hardware/rockchip/codec2 \
+    hardware/rockchip/librga
+PRODUCT_PACKAGES += \
+    android.hardware.media.c2@1.1-service \
+    libcodec2_rk_component \
+    libmpp \
+    librga
+PRODUCT_COPY_FILES += \
+    $(DEVICE_PATH)/configs/media/media_codecs.xml:$(TARGET_COPY_OUT_VENDOR)/etc/media_codecs.xml \
+    $(DEVICE_PATH)/configs/media/media_codecs_c2_rk.xml:$(TARGET_COPY_OUT_VENDOR)/etc/media_codecs_c2_rk.xml
+
+# App de configurações do projetor (vendor/hy300/hy300-rk3566/android/hy300-settings, do fonte):
+# priv-app com a chave de plataforma; o TvSettings mostra o item "Projetor" para ele.
+PRODUCT_PACKAGES += HY300Settings
+
+# Animação de boot com log ao vivo (vendor/hy300/hy300-rk3566/android/bootlog, versão Java portada
+# do Android 12): o serviço bootanim vira o bootlog.sh (rc com override no /product). Enquanto o
+# ART não sobe, o bootanimation nativo mostra o hy300-bootlog.zip (1 quadro, o logo).
+PRODUCT_PACKAGES += \
+    hy300-bootlog \
+    hy300-bootlog.rc \
+    hy300-bootlog.sh \
+    hy300-bootlog-logo.png \
+    hy300-bootlog.zip
+PRODUCT_PRODUCT_PROPERTIES += \
+    ro.product.bootanim.file=hy300-bootlog.zip
+
+# Segurança e sistema por software (a fábrica usa OP-TEE com TA fechada). KeyMint é preciso
+# para o FBE do /data.
+PRODUCT_PACKAGES += \
+    android.hardware.security.keymint-service \
+    com.android.hardware.gatekeeper.nonsecure \
+    android.hardware.health-service.example \
+    android.hardware.health-service.example_recovery
+
+# Rede cabeada por adaptador USB (o Wi-Fi AIC8800 ainda não funciona no kernel Android).
+PRODUCT_COPY_FILES += \
+    frameworks/native/data/etc/android.hardware.ethernet.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.hardware.ethernet.xml
 
 # TODO(marcos seguintes, ver docs/lineageos.md):
 #  - áudio: HAL AIDL de referência com tinyalsa no card 0 (I2S1, codec mudo);
-#  - Bluetooth: AIC8800 por UART (ttyS1, 1,5 Mbaud), HAL AIDL padrão em cima do hci_uart;
-#  - KeyMint/Gatekeeper por software (a fábrica usa OP-TEE com TA fechada);
+#  - Wi-Fi (driver AIC8800 no kernel Android) e Bluetooth (UART ttyS1, HAL AIDL padrão);
 #  - sensores: acelerômetro SC7A20 (keystone automático do app);
-#  - app io.github.hy300.settings como app de plataforma (android_app_import, certificate
-#    "platform") e o patch de keystone no SurfaceFlinger.
+#  - patch de keystone no SurfaceFlinger (o app já grava as props persist.sys.keystone.*).

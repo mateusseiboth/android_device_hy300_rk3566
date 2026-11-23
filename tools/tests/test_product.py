@@ -269,5 +269,44 @@ class AuroraLocationTest(unittest.TestCase):
         self.assertIn("/prebuilt-apps/", tracked)
 
 
+class DrmTest(unittest.TestCase):
+    """Rodada 12: YouTube para TV fechava em MediaDrm.isCryptoSchemeSupportedNative ("Failed to
+    query crypto scheme support"). Sem nenhum HAL de DRM, DrmHal::initCheck() é ERROR_UNSUPPORTED,
+    DrmUtils::MakeObject() devolve nulo e o JNI lança IllegalArgumentException. Com um IDrmFactory
+    (ClearKey), a consulta por um UUID desconhecido (Widevine) devolve false."""
+
+    def test_clearkey_hal_is_in_the_product(self):
+        self.assertIn("android.hardware.drm-service-lazy.clearkey",
+                      read_makefile_values("PRODUCT_PACKAGES"))
+
+    def test_drm_is_a_required_hal(self):
+        required = read(os.path.join(TREE, "configs", "vintf", "required_hals.txt"))
+        self.assertRegex(required, r"(?m)^android\.hardware\.drm\.IDrmFactory/clearkey ")
+
+
+class DebuggableTest(unittest.TestCase):
+    """Rodada 12: adb root e adb remount no userdebug (o LineageOS liga
+    PRODUCT_NOT_DEBUGGABLE_IN_USERDEBUG em vendor/lineage/config/common.mk e o userdebug saía com
+    ro.debuggable=0). O produto de topo vence as variáveis de valor único herdadas."""
+
+    def test_product_turns_debuggable_back_on(self):
+        # Valor único herdado não se desfaz no produto de topo (vazio herda; "false" vira true no
+        # add_json_bool). O patch vendor/lineage/0001 deixa o common.mk respeitar a flag.
+        text = read(os.path.join(TREE, "lineage_hy300.mk"))
+        flag = text.index("TARGET_USERDEBUG_DEBUGGABLE := true")
+        self.assertLess(flag, text.index("$(call inherit-product, vendor/lineage/config/common_full_tv.mk)"))
+        self.assertNotIn("PRODUCT_NOT_DEBUGGABLE_IN_USERDEBUG :=", text)
+        patch = read(os.path.join(TREE, "patches", "vendor", "lineage",
+                                  "0001-userdebug-depuravel-por-flag.patch"))
+        self.assertIn("+ifneq ($(TARGET_USERDEBUG_DEBUGGABLE),true)", patch)
+
+    @unittest.skipUnless(os.path.exists(os.path.join(OUT, "system", "build.prop")),
+                         "sem imagem montada")
+    def test_built_userdebug_is_debuggable(self):
+        props = read(os.path.join(OUT, "system", "build.prop"))
+        if "ro.build.type=userdebug" in props:
+            self.assertIn("ro.debuggable=1", props)
+
+
 if __name__ == "__main__":
     unittest.main()

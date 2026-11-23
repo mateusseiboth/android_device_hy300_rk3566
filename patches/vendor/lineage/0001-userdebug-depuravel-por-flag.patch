@@ -1,0 +1,19 @@
+HY300: o userdebug pode continuar depurável (adb root, adb remount) com TARGET_USERDEBUG_DEBUGGABLE.
+PRODUCT_NOT_DEBUGGABLE_IN_USERDEBUG é variável de valor único: o produto de topo não a desfaz (vazio
+herda o valor de cima, e "false" vira true no add_json_bool do soong_extra_config.mk).
+
+diff --git a/config/common.mk b/config/common.mk
+index c3a9eed..10e5cc4 100644
+--- a/config/common.mk
++++ b/config/common.mk
+@@ -40,8 +40,10 @@ else
+ PRODUCT_SYSTEM_EXT_PROPERTIES += ro.adb.secure=1
+ 
+ # Set ro.debuggable=0 for userdebug
++ifneq ($(TARGET_USERDEBUG_DEBUGGABLE),true)
+ PRODUCT_NOT_DEBUGGABLE_IN_USERDEBUG := true
+ endif
++endif
+ 
+ # Disable extra StrictMode features on all non-engineering builds
+ PRODUCT_PRODUCT_PROPERTIES += persist.sys.strictmode.disable=true

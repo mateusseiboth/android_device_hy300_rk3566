@@ -323,3 +323,11 @@ ifneq ($(TARGET_BUILD_VARIANT),user)
 PRODUCT_PRODUCT_PROPERTIES += \
     ro.logd.size=1M
 endif
+
+# DRM: ClearKey (AIDL, AOSP, fonte aberta), sob demanda. Sem nenhum IDrmFactory o
+# DrmHal::initCheck() é ERROR_UNSUPPORTED, DrmUtils::MakeObject() devolve nulo e o
+# MediaDrm.isCryptoSchemeSupported() lança IllegalArgumentException ("Failed to query crypto
+# scheme support"): o YouTube para TV fechava ao abrir. Com um IDrmFactory a consulta pelo
+# Widevine devolve false. Widevine continua fora (binário do Google).
+PRODUCT_PACKAGES += \
+    android.hardware.drm-service-lazy.clearkey

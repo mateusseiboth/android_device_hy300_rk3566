@@ -14,6 +14,12 @@ PRODUCT_IS_ATV := true
 TARGET_REQUIRES_HIDL_CAS_HAL := false
 TARGET_SUPPORTS_OMX_SERVICE := false
 
+# adb root e adb remount no userdebug: o vendor/lineage/config/common.mk liga
+# PRODUCT_NOT_DEBUGGABLE_IN_USERDEBUG e o userdebug saía com ro.debuggable=0. Com esta flag (patch
+# patches/vendor/lineage/0001) ele não liga. Num build "user" nada muda; na imagem de uso o perfil
+# (androidboot.hy300.perfil) continua decidindo se o adb liga. Antes dos inherit-product.
+TARGET_USERDEBUG_DEBUGGABLE := true
+
 # Memória baixa (1,5 GB): perfis de boot e lowram do ATV. Tem que vir antes do device.mk
 # para que os valores do aparelho possam sobrescrever.
 $(call inherit-product, device/google/atv/products/atv_lowram_defaults.mk)

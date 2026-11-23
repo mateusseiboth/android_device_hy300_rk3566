@@ -1,0 +1,237 @@
+HY300: encoder do Codec2 da Rockchip sem lock pela CPU na entrada, com o gralloc genérico.
+Boot 8: o scrcpy com c2.rk.avc.encoder saía preto. O buffer RGBA da Surface de entrada (display
+virtual) vem do minigbm sem uso de CPU; o C2RKMpiEnc mapeava o bloco só para saber o layout (e
+para o dump), o lock falhava ("failed to mapInputBuffer with err 14") e todo quadro dava erro. O
+MPP e a RGA já recebem o fd do dma-buf, então com C2_RK_GENERIC_GRALLOC o encoder não mapeia: o
+layout vem do formato HAL do handle (C2RKGenericInput.h, testado no host) e o dump de quadros
+fica sem a cópia da entrada.
+
+diff --git a/component/osal/Android.bp b/component/osal/Android.bp
+index 1d4552e..efff4cb 100644
+--- a/component/osal/Android.bp
++++ b/component/osal/Android.bp
+@@ -67,3 +67,16 @@ cc_test_host {
+         "-Wconversion",
+     ],
+ }
++
++// HY300: entrada do encoder sem lock pela CPU com o gralloc genérico, só C++ padrão.
++cc_test_host {
++    name: "libcodec2_rk_generic_input_test",
++    srcs: ["tests/C2RKGenericInputTest.cpp"],
++    local_include_dirs: ["include"],
++    cflags: [
++        "-Wall",
++        "-Werror",
++        "-Wextra",
++        "-Wconversion",
++    ],
++}
+diff --git a/component/osal/include/C2RKGenericInput.h b/component/osal/include/C2RKGenericInput.h
+new file mode 100644
+index 0000000..9d4c0db
+--- /dev/null
++++ b/component/osal/include/C2RKGenericInput.h
+@@ -0,0 +1,51 @@
++/*
++ * SPDX-FileCopyrightText: 2026 Mateus Seiboth
++ * SPDX-License-Identifier: Apache-2.0
++ */
++
++#pragma once
++
++#include <cstdint>
++
++// HY300: entrada do encoder com o gralloc genérico (minigbm). O buffer da Surface de entrada
++// (display virtual da gravação de tela ou do scrcpy) é alocado para a GPU e o encoder, sem uso
++// de CPU, e o minigbm recusa o lock pela CPU. O MPP e a RGA leem o dma-buf pelo fd, então o
++// encoder não precisa mapear: o layout vem do formato HAL do handle. Sem dependência do Android,
++// para os testes.
++namespace android::c2_rk_generic {
++
++enum class InputLayout { kRgba, kYuv, kUnknown };
++
++// system/core/libsystem/include/system/graphics-base-v1.0.h e o NV12 da Rockchip.
++constexpr uint32_t kHalInRgba8888 = 0x1;
++constexpr uint32_t kHalInRgbx8888 = 0x2;
++constexpr uint32_t kHalInBgra8888 = 0x5;
++constexpr uint32_t kHalInYcrcb420Sp = 0x11;
++constexpr uint32_t kHalInRkNv12 = 0x15;
++constexpr uint32_t kHalInImplementationDefined = 0x22;
++constexpr uint32_t kHalInYcbcr420888 = 0x23;
++
++constexpr InputLayout inputLayoutFromHalFormat(uint32_t format) {
++    switch (format) {
++        case kHalInRgba8888:
++        case kHalInRgbx8888:
++        case kHalInBgra8888:
++        // O minigbm resolve IMPLEMENTATION_DEFINED sem uso de câmera para XBGR8888 (RGBA).
++        case kHalInImplementationDefined:
++            return InputLayout::kRgba;
++        case kHalInYcrcb420Sp:
++        case kHalInRkNv12:
++        // O minigbm resolve YCBCR_420_888 para NV12.
++        case kHalInYcbcr420888:
++            return InputLayout::kYuv;
++        default:
++            return InputLayout::kUnknown;
++    }
++}
++
++// Com o gralloc da Rockchip o lock funciona e o caminho original fica igual.
++constexpr bool needsCpuMapping(bool genericGralloc) {
++    return !genericGralloc;
++}
++
++}  // namespace android::c2_rk_generic
+diff --git a/component/osal/tests/C2RKGenericInputTest.cpp b/component/osal/tests/C2RKGenericInputTest.cpp
+new file mode 100644
+index 0000000..d19fdc9
+--- /dev/null
++++ b/component/osal/tests/C2RKGenericInputTest.cpp
+@@ -0,0 +1,45 @@
++/*
++ * SPDX-FileCopyrightText: 2026 Mateus Seiboth
++ * SPDX-License-Identifier: Apache-2.0
++ *
++ * HY300: entrada do encoder com o gralloc genérico (minigbm). Rodam no host.
++ */
++
++#include <gtest/gtest.h>
++
++#include "C2RKGenericInput.h"
++
++namespace android::c2_rk_generic {
++namespace {
++
++// Boot 8: o RGBA da Surface de entrada (display virtual) vem sem uso de CPU e o lock falhava
++// ("failed to mapInputBuffer with err 14"). Com o gralloc genérico não há lock nenhum.
++TEST(GenericInputTest, genericGrallocNeverLocksTheInput) {
++    EXPECT_FALSE(needsCpuMapping(true));
++}
++
++TEST(GenericInputTest, rockchipGrallocKeepsTheOriginalMapping) {
++    EXPECT_TRUE(needsCpuMapping(false));
++}
++
++// O layout que o lock dava vem do formato HAL do handle.
++TEST(GenericInputTest, rgbaSurfaceInputIsRgba) {
++    EXPECT_EQ(inputLayoutFromHalFormat(0x1), InputLayout::kRgba);  // RGBA_8888 do boot 8
++    EXPECT_EQ(inputLayoutFromHalFormat(0x2), InputLayout::kRgba);
++    EXPECT_EQ(inputLayoutFromHalFormat(0x5), InputLayout::kRgba);
++    EXPECT_EQ(inputLayoutFromHalFormat(0x22), InputLayout::kRgba);  // IMPLEMENTATION_DEFINED
++}
++
++TEST(GenericInputTest, byteBufferInputIsYuv) {
++    EXPECT_EQ(inputLayoutFromHalFormat(0x23), InputLayout::kYuv);  // YCBCR_420_888
++    EXPECT_EQ(inputLayoutFromHalFormat(0x15), InputLayout::kYuv);
++    EXPECT_EQ(inputLayoutFromHalFormat(0x11), InputLayout::kYuv);
++}
++
++TEST(GenericInputTest, otherFormatsAreRefused) {
++    EXPECT_EQ(inputLayoutFromHalFormat(0x36), InputLayout::kUnknown);  // P010
++    EXPECT_EQ(inputLayoutFromHalFormat(0), InputLayout::kUnknown);
++}
++
++}  // namespace
++}  // namespace android::c2_rk_generic
+diff --git a/component/video/C2RKMpiEnc.cpp b/component/video/C2RKMpiEnc.cpp
+index f1d723d..70cee64 100644
+--- a/component/video/C2RKMpiEnc.cpp
++++ b/component/video/C2RKMpiEnc.cpp
+@@ -35,6 +35,7 @@
+ #include "C2RKCodecMapper.h"
+ #include "C2RKChipCapDef.h"
+ #include "C2RKGraphicBufferMapper.h"
++#include "C2RKGenericInput.h"
+ #include "C2RKDumpStateService.h"
+ #include "C2RKPropsDef.h"
+ #include "C2RKMlvecLegacy.h"
+@@ -2848,7 +2849,10 @@ void C2RKMpiEnc::process(
+ 
+     std::shared_ptr<const C2GraphicView> view;
+     std::shared_ptr<C2Buffer> inputBuffer = nullptr;
+-    if (!work->input.buffers.empty()) {
++    // Gralloc genérico: sem lock pela CPU (o buffer da Surface de entrada não tem uso de CPU e o
++    // minigbm recusa); o MPP e a RGA leem o dma-buf pelo fd em getInBufferFromWork().
++    if (!work->input.buffers.empty() &&
++            c2_rk_generic::needsCpuMapping(kGenericGralloc)) {
+         inputBuffer = work->input.buffers[0];
+         view = std::make_shared<const C2GraphicView>(
+                 inputBuffer->data().graphicBlocks().front().map().get());
+@@ -3279,10 +3283,12 @@ c2_status_t C2RKMpiEnc::getInBufferFromWork(
+     std::shared_ptr<C2Buffer> inputBuffer = nullptr;
+ 
+     inputBuffer = work->input.buffers[0];
+-    view = std::make_shared<const C2GraphicView>(
+-            inputBuffer->data().graphicBlocks().front().map().get());
++    if (c2_rk_generic::needsCpuMapping(kGenericGralloc)) {
++        view = std::make_shared<const C2GraphicView>(
++                inputBuffer->data().graphicBlocks().front().map().get());
++    }
++    // Sem mapa (gralloc genérico) não há ponteiro de CPU: só o fd do dma-buf.
+     const C2GraphicView* const input = view.get();
+-    const C2PlanarLayout& layout = input->layout();
+     const C2Handle *c2Handle = inputBuffer->data().graphicBlocks().front().handle();
+ 
+     uint32_t bqSlot, width, height, format, stride, generation;
+@@ -3318,18 +3324,32 @@ c2_status_t C2RKMpiEnc::getInBufferFromWork(
+     /* dump frame time consuming if neccessary */
+     mDumpService->recordFrameTime(this, frameIndex);
+ 
+-    Log.D("in buffer attr. w %d h %d stride %d layout 0x%x frameIndex %lld",
+-           width, height, stride, layout.type, frameIndex);
++    // O layout vem do mapa (gralloc da Rockchip) ou do formato HAL do handle (gralloc genérico).
++    uint32_t layoutType = C2PlanarLayout::TYPE_UNKNOWN;
++    if (input != nullptr) {
++        layoutType = input->layout().type;
++    } else if (c2_rk_generic::inputLayoutFromHalFormat(format) ==
++               c2_rk_generic::InputLayout::kRgba) {
++        layoutType = C2PlanarLayout::TYPE_RGBA;
++    } else if (c2_rk_generic::inputLayoutFromHalFormat(format) ==
++               c2_rk_generic::InputLayout::kYuv) {
++        layoutType = C2PlanarLayout::TYPE_YUV;
++    }
+ 
+-    switch (layout.type) {
++    Log.D("in buffer attr. w %d h %d stride %d format 0x%x layout 0x%x frameIndex %lld",
++           width, height, stride, format, layoutType, frameIndex);
++
++    switch (layoutType) {
+     case C2PlanarLayout::TYPE_RGB:
+         [[fallthrough]];
+     case C2PlanarLayout::TYPE_RGBA: {
+         uint32_t fd = c2Handle->data[0];
+ 
+         /* record input frame buffer */
+-        mDumpService->recordFrame(this,
+-                (void*)input->data()[0], stride, height, MPP_FMT_RGBA8888);
++        if (input != nullptr) {
++            mDumpService->recordFrame(this,
++                    (void*)input->data()[0], stride, height, MPP_FMT_RGBA8888);
++        }
+ 
+         if (!needRgaConvert(stride, height, MPP_FMT_RGBA8888)) {
+             if (mHorStride != stride || mVerStride != height) {
+@@ -3371,8 +3391,10 @@ c2_status_t C2RKMpiEnc::getInBufferFromWork(
+         uint32_t fd = c2Handle->data[0];
+ 
+         /* record input frame buffer */
+-        mDumpService->recordFrame(this,
+-                (void*)input->data()[0], stride, height, MPP_FMT_YUV420SP);
++        if (input != nullptr) {
++            mDumpService->recordFrame(this,
++                    (void*)input->data()[0], stride, height, MPP_FMT_YUV420SP);
++        }
+ 
+         if (mInputMppFmt != MPP_FMT_YUV420SP) {
+             Log.I("update use yuv input format");
+@@ -3411,7 +3433,7 @@ c2_status_t C2RKMpiEnc::getInBufferFromWork(
+         }
+     } break;
+     default:
+-        Log.E("Unrecognized plane type: %d", layout.type);
++        Log.E("Unrecognized plane type: %d (format 0x%x)", layoutType, format);
+         ret = C2_BAD_VALUE;
+     }
+ 

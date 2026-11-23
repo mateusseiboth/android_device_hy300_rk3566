@@ -13,3 +13,4 @@ android.hardware.graphics.composer3.IComposer/default SurfaceFlinger (tela)
 android.hardware.gatekeeper.IGatekeeper/default LockSettingsService/keystore2
 android.hardware.media.c2.IComponentStore/default codecs de vídeo por hardware (c2.rk.*)
 android.hardware.wifi.supplicant.ISupplicant/default Wi-Fi: o WifiNative fala com o wpa_supplicant pelo AIDL
+android.hardware.drm.IDrmFactory/clearkey MediaDrm: sem nenhum IDrmFactory o DrmHal::initCheck() é ERROR_UNSUPPORTED e isCryptoSchemeSupported lança exceção (YouTube para TV fechava)

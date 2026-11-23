@@ -268,3 +268,25 @@ PRODUCT_VENDOR_PROPERTIES += \
     ro.vendor.hy300.accel.device=gsensor \
     ro.vendor.hy300.accel.control=/dev/mma8452_daemon \
     ro.vendor.hy300.accel.axes=x,y,z
+
+# Bluetooth do AIC8800 (UART1 a 1,5 Mbaud), sem blobs: HAL AIDL padrão do AOSP e o
+# hy300-bt-uart (bluetooth/) para ligar o rfkill e ajustar a UART antes dele. Desligado até o
+# kernel entregar o Bluetooth (rfkill do aic8800_bsp e o patch do BT carregado pelo SDIO; no
+# modo "hci", também CONFIG_BT_HCIUART_H4): com o HAL sem controlador, a pilha do Android fica
+# reiniciando. Para ligar: HY300_WITH_BLUETOOTH=true no ambiente do build.
+# Modo "uart": o HAL fala H4 direto no tty (vendor.ser.bt-uart). Modo "hci": o kernel cria o
+# hci0 pela disciplina de linha e o HAL usa o canal de usuário do hci0.
+ifeq ($(HY300_WITH_BLUETOOTH),true)
+PRODUCT_PACKAGES += \
+    android.hardware.bluetooth-service.default \
+    hy300-bt-uart
+PRODUCT_COPY_FILES += \
+    frameworks/native/data/etc/android.hardware.bluetooth.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.hardware.bluetooth.xml \
+    frameworks/native/data/etc/android.hardware.bluetooth_le.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.hardware.bluetooth_le.xml
+PRODUCT_VENDOR_PROPERTIES += \
+    ro.vendor.hy300.bt.mode=uart \
+    ro.vendor.hy300.bt.tty=/dev/ttyS1 \
+    ro.vendor.hy300.bt.baud=1500000 \
+    ro.vendor.hy300.bt.flow=1 \
+    vendor.ser.bt-uart=/dev/ttyS1
+endif

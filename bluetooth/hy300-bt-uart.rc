@@ -1,0 +1,12 @@
+# SPDX-FileCopyrightText: 2026 Mateus Seiboth
+# SPDX-License-Identifier: Apache-2.0
+#
+# Bluetooth do AIC8800 (UART1): o hy300-bt-uart liga o rfkill e ajusta a UART antes do HAL
+# AIDL padrão (android.hardware.bluetooth-service.default). O modo vem de ro.vendor.hy300.bt.mode.
+# Roda como root porque o rfkill do Bluetooth pode não ser o rfkill0 (o init.rk3566.rc só dá o
+# rfkill0 ao usuário bluetooth); a sepolicy (hy300_bt_uart) limita ao tty e ao rfkill.
+service vendor.hy300-bt-uart /vendor/bin/hy300-bt-uart
+    class hal
+    user root
+    group bluetooth
+    oneshot

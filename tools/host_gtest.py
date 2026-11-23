@@ -36,14 +36,14 @@ def extract(patch, includes, destination):
                    capture_output=True, text=True)
 
 
-def run(patch, includes, sources, extra_flags=()):
+def run(patch, includes, sources, extra_flags=(), std="c++20"):
     """Extrai, compila `sources` (relativos à raiz do projeto do patch) e roda. Devolve o
     CompletedProcess da execução; levanta CalledProcessError se a compilação falhar."""
     compiler = find_compiler()
     with tempfile.TemporaryDirectory() as work:
         extract(patch, includes, work)
         binary = os.path.join(work, "test")
-        compile_args = [compiler, "-std=c++20", *WARNINGS, *extra_flags,
+        compile_args = [compiler, f"-std={std}", *WARNINGS, *extra_flags,
                         *[os.path.join(work, source) for source in sources],
                         "-lgtest", "-lgtest_main", "-pthread", "-o", binary]
         subprocess.run(compile_args, check=True, capture_output=True, text=True)

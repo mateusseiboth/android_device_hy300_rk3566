@@ -82,6 +82,19 @@ mostra o item "Projetor" porque o app trata `com.android.tv.settings.SOUND`) e `
 zip de 1 quadro com o logo). O `init.rk3566.rc` dá ao app o motor de foco e os LEDs (0666, como a
 fábrica).
 
+## Wi-Fi, áudio e adb pela rede
+
+- **Wi-Fi**: módulos do AIC8800 carregados no `boot` (`configs/init/hy300-wifi-modules.sh`),
+  firmware só no build local, `wpa_supplicant` AIDL do AOSP e `wificond`, sem HAL Wi-Fi do
+  fabricante (o framework usa `wifi.interface`).
+- **Áudio**: APEX de exemplo do AOSP com `configs/audio/audio_policy_configuration.xml` (o HAL
+  registra um `IModule` por módulo desse arquivo).
+- **Userdebug**: `configs/init/hy300-net.sh` instala a chave do adb e conecta o Wi-Fi a partir de
+  `/metadata/hy300-diag/{adb_keys,wifi.conf}` (gravados pelo Alpine; formato em
+  `docs/lineageos.md` do projeto) e liga o adb pela rede na porta 5555, com autenticação.
+- `tools/check_vintf_hals.py`: HALs obrigatórios e uma `interface` no init para cada HAL
+  declarado.
+
 ## Desempenho e memória
 
 - `init.rk3566.rc`: CPU no governador `performance` (vale quando o kernel tiver cpufreq), GPU

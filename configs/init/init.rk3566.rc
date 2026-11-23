@@ -110,3 +110,27 @@ service hy300-diag /system/bin/sh /vendor/bin/hy300-diag.sh
 
 on post-fs && property:ro.build.type=userdebug
     start hy300-diag
+
+# Wi-Fi AIC8800: os módulos sobem em segundo plano (a carga do firmware leva ~40 s) e a interface
+# fica para o Android (wificond + wpa_supplicant, sem HAL Wi-Fi do fabricante).
+service hy300-wifi-modules /vendor/bin/sh /vendor/bin/hy300-wifi-modules.sh
+    user root
+    group root
+    seclabel u:r:vendor_modprobe:s0
+    disabled
+    oneshot
+
+on boot
+    start hy300-wifi-modules
+
+# Rede e adb pela rede no userdebug (configs/init/hy300-net.sh): chave do adb e Wi-Fi a partir do
+# que o Alpine deixou em /metadata/hy300-diag, depois do boot_completed.
+service hy300-net /system/bin/sh /vendor/bin/hy300-net.sh
+    user root
+    group root
+    seclabel u:r:su:s0
+    disabled
+    oneshot
+
+on property:sys.boot_completed=1 && property:ro.build.type=userdebug
+    start hy300-net

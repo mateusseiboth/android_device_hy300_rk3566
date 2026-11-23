@@ -8,13 +8,17 @@
 # /metadata/hy300-diag/ativo.
 #
 # Grava em /metadata/hy300-diag/<n>/ (n = contador de boots; ficam as 3 últimas): dmesg, logcat,
-# getprop e /proc/interrupts a cada 20 s;
-# depois do boot_completed, o estado do sistema (SurfaceFlinger, codecs, memória, frequências,
-# módulos, processos); em paralelo, o teste do Wi-Fi AIC8800 só com o driver (sem HAL). Aos 8 min
-# de uptime, com ou sem boot_completed, grava a marca de "ficar" do Alpine na misc (0x10000, o
-# mesmo formato do scripts/reboot-to-alpine.sh do hy300-alpine: o Alpine fica no ar em vez de
-# voltar sozinho ao Lineage), faz sync e um reboot NORMAL (sys.powerctl=reboot, sem alvo: o init
-# não grava BCB) e o U-Boot sobe a partição boot, onde está o Alpine.
+# getprop e /proc/interrupts a cada 20 s; depois do boot_completed, o estado do sistema
+# (SurfaceFlinger, codecs, memória, frequências, módulos, processos); em paralelo, o estado do
+# Wi-Fi AIC8800.
+#
+# Aos 8 min de uptime, com ou sem boot_completed:
+#  - se o adb pela rede estiver de pé (hy300-net.sh: adbd na porta 5555 e IPv4 no wlan0), não
+#    reinicia: quem conduz é o adb;
+#  - senão grava a marca de "ficar" do Alpine na misc (0x10000, o mesmo formato do
+#    scripts/reboot-to-alpine.sh do hy300-alpine: o Alpine fica no ar em vez de voltar sozinho ao
+#    Lineage), faz sync e um reboot NORMAL (sys.powerctl=reboot, sem alvo: o init não grava BCB) e
+#    o U-Boot sobe a partição boot, onde está o Alpine.
 #
 # Testes: tools/tests/test_diag.py (HY300_DIAG_LIB=1 só define as funções).
 
@@ -34,12 +38,12 @@ DIAG_WIFI_LIB="${HY300_DIAG_WIFI_LIB:-/vendor/etc/hy300/hy300-wifi.sh}"
 DIAG_MODULE_DIR="${HY300_DIAG_MODULE_DIR:-/vendor/lib/modules}"
 DIAG_FIRMWARE_DIR="${HY300_DIAG_FIRMWARE_DIR:-/vendor/etc/firmware/aic8800}"
 DIAG_MISC="${HY300_DIAG_MISC:-/dev/block/by-name/misc}"
-DIAG_WIFI_SCAN_TIMEOUT=60
+DIAG_MAX_LOOPS="${HY300_DIAG_MAX_LOOPS:-1000000}"
 # Marca de ficar: "hy300-ficar\0" + versão 1, 16 bytes em 0x10000 (bloco 4096 de 16 bytes).
 STAY_MARK_INDEX=4096
 STAY_MARK_HEX="68 79 33 30 30 2d 66 69 63 61 72 00 01 00 00 00"
 STAY_ZERO_HEX="00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00"
-DIAG_WIFI_IFACE_WAIT=20
+DIAG_WIFI_IFACE_WAIT=60
 
 # userdebug pelo ro.build.type: o LineageOS liga PRODUCT_NOT_DEBUGGABLE_IN_USERDEBUG e o
 # userdebug sai com ro.debuggable=0.
@@ -126,8 +130,10 @@ collect_after_boot() {
 	sync
 }
 
-# Teste do AIC8800 só com o driver: carrega os módulos (firmware local), sobe a interface e faz
-# um scan. Do scan fica só a contagem de redes: nomes e endereços dos vizinhos não são gravados.
+# Wi-Fi AIC8800: os módulos sobem pelo init (hy300-wifi-modules) e a interface é do Android
+# (wpa_supplicant). O diag só registra o estado (sem scan próprio, que brigaria com o
+# supplicant). Se a interface não aparecer, carrega os módulos ele mesmo e tenta religar o chip.
+# Nomes de rede e endereços não são gravados.
 run_wifi_test() {
 	report="$1/wifi.txt"
 	# shellcheck source=/dev/null
@@ -135,26 +141,31 @@ run_wifi_test() {
 	{
 		echo "[$(uptime_seconds) s] início"
 		has_wifi_card && echo "chip no barramento SDIO" || echo "chip fora do barramento SDIO"
-		load_wifi_modules "$DIAG_MODULE_DIR" "$DIAG_FIRMWARE_DIR"
-		echo "[$(uptime_seconds) s] módulos carregados (rc=$?)"
 		if ! iface=$(wait_for_wireless_iface "$DIAG_WIFI_IFACE_WAIT"); then
-			echo "[$(uptime_seconds) s] sem interface sem fio em $DIAG_WIFI_IFACE_WAIT s"
+			echo "[$(uptime_seconds) s] sem interface sem fio em $DIAG_WIFI_IFACE_WAIT s; carregando os módulos"
 			dump_sdio_state
-			echo "religando o chip (WL_REG_ON) e tentando de novo"
-			recover_wifi_chip
 			load_wifi_modules "$DIAG_MODULE_DIR" "$DIAG_FIRMWARE_DIR"
-			iface=$(wait_for_wireless_iface "$DIAG_WIFI_IFACE_WAIT") ||
-				{ echo "[$(uptime_seconds) s] sem interface sem fio de novo"; dump_sdio_state; return 1; }
+			echo "[$(uptime_seconds) s] módulos carregados (rc=$?)"
+			if ! iface=$(wait_for_wireless_iface "$DIAG_WIFI_IFACE_WAIT"); then
+				echo "religando o chip (WL_REG_ON) e tentando de novo"
+				recover_wifi_chip
+				load_wifi_modules "$DIAG_MODULE_DIR" "$DIAG_FIRMWARE_DIR"
+				iface=$(wait_for_wireless_iface "$DIAG_WIFI_IFACE_WAIT") ||
+					{ echo "[$(uptime_seconds) s] sem interface sem fio de novo"; dump_sdio_state; return 1; }
+			fi
 		fi
 		echo "[$(uptime_seconds) s] interface $iface"
-		ip link set "$iface" up
-		echo "[$(uptime_seconds) s] ip link up (rc=$?)"
-		scan=$(timeout "$DIAG_WIFI_SCAN_TIMEOUT" iw dev "$iface" scan 2>&1)
-		echo "[$(uptime_seconds) s] scan rc=$?, redes no scan: $(echo "$scan" | grep -c '^BSS ')"
-		echo "$scan" | grep -v -e '^BSS ' -e 'SSID' -e 'BSSID' | grep -i -e 'error' -e 'failed' -e 'busy'
-		dmesg | grep -i -e aic -e rwnx -e sdio -e mmc1
+		iw dev "$iface" link 2>&1 | grep -v -i -e 'SSID' -e 'Connected to'
+		dmesg | grep -i -e aic -e rwnx -e sdio -e mmc1 | tail -n 200
 	} >>"$report" 2>&1
 	sync
+}
+
+# adb pela rede de pé: adbd rodando na porta 5555 e IPv4 no wlan0 (hy300-net.sh liga os dois).
+is_network_adb_up() {
+	[ "$(getprop init.svc.adbd)" = running ] || return 1
+	[ "$(getprop service.adb.tcp.port)" = 5555 ] || return 1
+	ip -4 addr show wlan0 2>/dev/null | grep -q 'inet '
 }
 
 read_mark_area() {
@@ -188,6 +199,8 @@ main() {
 		run_wifi_test "$dir" &
 	fi
 	collected=0
+	loops=0
+	adb_logged=0
 	while :; do
 		snapshot "$dir"
 		if [ "$collected" = 0 ] && [ "$(getprop sys.boot_completed)" = 1 ]; then
@@ -196,6 +209,14 @@ main() {
 			collected=1
 		fi
 		now=$(uptime_seconds)
+		if [ "$now" -ge "$DIAG_REBOOT_AFTER" ] && is_network_adb_up; then
+			[ "$adb_logged" = 1 ] || log_line "$dir" "adb pela rede no ar: sem reinício automático"
+			adb_logged=1
+			loops=$((loops + 1))
+			[ "$loops" -ge "$DIAG_MAX_LOOPS" ] && exit 0
+			sleep "$DIAG_INTERVAL"
+			continue
+		fi
 		if [ "$now" -ge "$DIAG_REBOOT_AFTER" ]; then
 			if write_stay_mark "$DIAG_MISC"; then
 				log_line "$dir" "marca de ficar gravada na misc"

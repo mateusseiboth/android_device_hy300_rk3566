@@ -138,6 +138,8 @@ WPA_SUPPLICANT_VERSION := VER_0_8_X
 BOARD_WPA_SUPPLICANT_DRIVER := NL80211
 BOARD_HOSTAPD_DRIVER := NL80211
 WIFI_DRIVER_SOCKET_IFACE := wlan0
+# O .rc do wpa_supplicant AIDL (com a "interface" do ISupplicant) só é instalado com isto.
+WIFI_HIDL_UNIFIED_SUPPLICANT_SERVICE_RC_ENTRY := true
 
 # Módulos do kernel no /vendor/lib/modules (prebuilt/modules, gerados junto com a Image pelo
 # kernel/build-lineage-kernel.sh do projeto). Hoje: Panfrost e dependências (a GPU é módulo no

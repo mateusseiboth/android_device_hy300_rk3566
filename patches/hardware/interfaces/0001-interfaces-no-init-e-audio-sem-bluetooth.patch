@@ -1,0 +1,98 @@
+HY300: HALs de exemplo do AOSP declarando as "interface" no init e áudio sem Bluetooth.
+- .rc de áudio (core e efeitos), gatekeeper, health, keymint e power com "interface aidl ...":
+  o servicemanager sobe o serviço sob demanda (no boot 3 o init não achava o IModule/default);
+- o APEX de áudio não declara o módulo bluetooth nem o provedor de áudio Bluetooth: o HY300
+  não tem Bluetooth e ninguém registraria essas instâncias.
+
+diff --git a/audio/aidl/default/android.hardware.audio.service-aidl.example.rc b/audio/aidl/default/android.hardware.audio.service-aidl.example.rc
+index c3e19ba..d593dea 100644
+--- a/audio/aidl/default/android.hardware.audio.service-aidl.example.rc
++++ b/audio/aidl/default/android.hardware.audio.service-aidl.example.rc
+@@ -1,5 +1,8 @@
+ 
+ service vendor.audio-hal-aidl /apex/com.android.hardware.audio/bin/hw/android.hardware.audio.service-aidl.example
++    interface aidl android.hardware.audio.core.IConfig/default
++    interface aidl android.hardware.audio.core.IModule/default
++    interface aidl android.hardware.audio.core.IModule/r_submix
+     class hal
+     user audioserver
+     # media gid needed for /dev/fm (radio) and for /data/misc/media (tee)
+@@ -12,6 +15,7 @@ service vendor.audio-hal-aidl /apex/com.android.hardware.audio/bin/hw/android.ha
+     onrestart restart audioserver
+ 
+ service vendor.audio-effect-hal-aidl /apex/com.android.hardware.audio/bin/hw/android.hardware.audio.effect.service-aidl.example
++    interface aidl android.hardware.audio.effect.IFactory/default
+     class hal
+     user audioserver
+     # media gid needed for /dev/fm (radio) and for /data/misc/media (tee)
+diff --git a/audio/aidl/default/android.hardware.audio.service-aidl.xml b/audio/aidl/default/android.hardware.audio.service-aidl.xml
+index fda4af6..59175e4 100644
+--- a/audio/aidl/default/android.hardware.audio.service-aidl.xml
++++ b/audio/aidl/default/android.hardware.audio.service-aidl.xml
+@@ -9,11 +9,6 @@
+     <version>4</version>
+     <fqname>IModule/r_submix</fqname>
+   </hal>
+-  <hal format="aidl">
+-    <name>android.hardware.audio.core</name>
+-    <version>4</version>
+-    <fqname>IModule/bluetooth</fqname>
+-  </hal>
+   <hal format="aidl">
+     <name>android.hardware.audio.core</name>
+     <version>4</version>
+diff --git a/audio/aidl/default/apex/com.android.hardware.audio/Android.bp b/audio/aidl/default/apex/com.android.hardware.audio/Android.bp
+index 510fee5..e1353e3 100644
+--- a/audio/aidl/default/apex/com.android.hardware.audio/Android.bp
++++ b/audio/aidl/default/apex/com.android.hardware.audio/Android.bp
+@@ -47,7 +47,6 @@ apex {
+     prebuilts: [
+         "android.hardware.audio.service-aidl.example.rc",
+         "android.hardware.audio.service-aidl.xml",
+-        "android.hardware.bluetooth.audio.xml",
+         "audio_eraser_classifier_model",
+         "audio_eraser_separator_model",
+     ],
+diff --git a/gatekeeper/aidl/software/android.hardware.gatekeeper-service.nonsecure.rc b/gatekeeper/aidl/software/android.hardware.gatekeeper-service.nonsecure.rc
+index d361730..eb92761 100644
+--- a/gatekeeper/aidl/software/android.hardware.gatekeeper-service.nonsecure.rc
++++ b/gatekeeper/aidl/software/android.hardware.gatekeeper-service.nonsecure.rc
+@@ -1,4 +1,6 @@
+ service vendor.gatekeeper_nonsecure /apex/com.android.hardware.gatekeeper/bin/hw/android.hardware.gatekeeper-service.nonsecure
++    interface aidl android.hardware.gatekeeper.IGatekeeper/default
++    interface aidl android.hardware.security.sharedsecret.ISharedSecret/gatekeeper
+     class early_hal
+     user system
+     group system
+diff --git a/health/aidl/default/android.hardware.health-service.example.rc b/health/aidl/default/android.hardware.health-service.example.rc
+index e052024..6ac932c 100644
+--- a/health/aidl/default/android.hardware.health-service.example.rc
++++ b/health/aidl/default/android.hardware.health-service.example.rc
+@@ -1,4 +1,5 @@
+ service vendor.health-default /vendor/bin/hw/android.hardware.health-service.example
++    interface aidl android.hardware.health.IHealth/default
+     class hal
+     user system
+     group system
+diff --git a/power/aidl/default/power-default.rc b/power/aidl/default/power-default.rc
+index 9efbc85..6b877e0 100644
+--- a/power/aidl/default/power-default.rc
++++ b/power/aidl/default/power-default.rc
+@@ -1,4 +1,5 @@
+ service vendor.power-default /vendor/bin/hw/android.hardware.power-service.example
++    interface aidl android.hardware.power.IPower/default
+     class hal
+     user nobody
+     group system
+diff --git a/security/keymint/aidl/default/android.hardware.security.keymint-service.rc b/security/keymint/aidl/default/android.hardware.security.keymint-service.rc
+index 0c3a6e1..48e3963 100644
+--- a/security/keymint/aidl/default/android.hardware.security.keymint-service.rc
++++ b/security/keymint/aidl/default/android.hardware.security.keymint-service.rc
+@@ -1,3 +1,7 @@
+ service vendor.keymint-default /vendor/bin/hw/android.hardware.security.keymint-service
++    interface aidl android.hardware.security.keymint.IKeyMintDevice/default
++    interface aidl android.hardware.security.keymint.IRemotelyProvisionedComponent/default
++    interface aidl android.hardware.security.secureclock.ISecureClock/default
++    interface aidl android.hardware.security.sharedsecret.ISharedSecret/default
+     class early_hal
+     user nobody

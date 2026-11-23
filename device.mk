@@ -120,11 +120,26 @@ PRODUCT_PRODUCT_PROPERTIES += \
 #    no /vendor/etc; sem o arquivo ele sai, o "onrestart" reinicia o audioserver em laço, e o
 #    AudioService trava o system_server (o Watchdog o mata). O exemplo do AOSP instala o arquivo
 #    no vendor com esta variável.
+#  - Sem audio_policy_configuration.xml o HAL de exemplo não registra nenhum IModule (cria um por
+#    módulo do arquivo) e o audioserver espera o IModule/default para sempre; o Watchdog mata o
+#    system_server em AudioService.<init> (boot 3). configs/audio tem o módulo primário (só o
+#    alto-falante) e inclui do AOSP o r_submix, os volumes e o surround.
 $(call soong_config_set_bool,hardware_interfaces_audio,use_default_audio_effects_config,true)
+$(call soong_config_set_bool,frameworks_av,use_aosp_audio_policy_volumes,true)
+$(call soong_config_set_bool,frameworks_av,use_aosp_default_volume_tables,true)
+$(call soong_config_set_bool,frameworks_av,use_aosp_r_submix_audio_policy_configuration,true)
+$(call soong_config_set_bool,frameworks_av,use_aosp_surround_sound_configuration_5_0,true)
 PRODUCT_PACKAGES += \
     android.hardware.power-service.example \
     com.android.hardware.audio \
-    audio_effects_config.xml
+    audio_effects_config.xml \
+    aosp_audio_policy_volumes.xml \
+    aosp_default_volume_tables.xml \
+    aosp_r_submix_audio_policy_configuration.xml \
+    aosp_surround_sound_configuration_5_0.xml
+PRODUCT_COPY_FILES += \
+    $(DEVICE_PATH)/configs/audio/audio_policy_configuration.xml:$(TARGET_COPY_OUT_VENDOR)/etc/audio_policy_configuration.xml \
+    $(DEVICE_PATH)/configs/audio/hy300_primary_audio_policy_configuration.xml:$(TARGET_COPY_OUT_VENDOR)/etc/hy300_primary_audio_policy_configuration.xml
 
 # Segurança e sistema por software (a fábrica usa OP-TEE com TA fechada). KeyMint é preciso
 # para o FBE do /data.
@@ -134,22 +149,34 @@ PRODUCT_PACKAGES += \
     android.hardware.health-service.example \
     android.hardware.health-service.example_recovery
 
-# Wi-Fi AIC8800, por enquanto só o teste do driver no hy300-diag (sem HAL nem wpa_supplicant):
-# módulos em prebuilt/modules (BOARD_VENDOR_KERNEL_MODULES), as funções do initramfs de teste
-# (hy300-wifi.sh, do repositório do projeto) e o iw. O firmware da AICSemi é binário de fábrica:
-# entra só no build local, de prebuilt/firmware/aic8800 (fora do git, extraído do vendor.img de
-# fábrica pelo kernel/build-lineage-kernel.sh).
-PRODUCT_PACKAGES += hy300-wifi.sh
+# Wi-Fi AIC8800: módulos em prebuilt/modules (BOARD_VENDOR_KERNEL_MODULES), carregados no boot
+# pelo hy300-wifi-modules.sh com as funções do initramfs de teste (hy300-wifi.sh, do repositório do
+# projeto). O firmware da AICSemi é binário de fábrica: entra só no build local, de
+# prebuilt/firmware/aic8800 (fora do git, extraído do vendor.img de fábrica pelo
+# kernel/build-lineage-kernel.sh).
+# Pilha do Android sem HAL Wi-Fi do fabricante: o framework funciona sem ela (WifiNative usa o
+# wificond e pega a interface de wifi.interface quando isVendorHalSupported() é falso), e o HAL
+# AIDL padrão do AOSP só sobe com uma libwifi-hal do fabricante (a libwifi-hal-fallback devolve
+# WIFI_ERROR_NOT_SUPPORTED no init_wifi_vendor_hal_func_table). wpa_supplicant AIDL do AOSP com
+# nl80211 (BoardConfig.mk).
+PRODUCT_PACKAGES += \
+    hy300-wifi.sh \
+    wpa_supplicant
 PRODUCT_PACKAGES_DEBUG += iw
 PRODUCT_COPY_FILES += \
-    $(foreach f,$(wildcard $(DEVICE_PATH)/prebuilt/firmware/aic8800/*),$(f):$(TARGET_COPY_OUT_VENDOR)/etc/firmware/aic8800/$(notdir $(f)))
+    $(foreach f,$(wildcard $(DEVICE_PATH)/prebuilt/firmware/aic8800/*),$(f):$(TARGET_COPY_OUT_VENDOR)/etc/firmware/aic8800/$(notdir $(f))) \
+    $(DEVICE_PATH)/configs/init/hy300-wifi-modules.sh:$(TARGET_COPY_OUT_VENDOR)/bin/hy300-wifi-modules.sh \
+    $(DEVICE_PATH)/configs/init/hy300-net.sh:$(TARGET_COPY_OUT_VENDOR)/bin/hy300-net.sh \
+    $(DEVICE_PATH)/configs/wifi/wpa_supplicant.conf:$(TARGET_COPY_OUT_VENDOR)/etc/wifi/wpa_supplicant.conf \
+    frameworks/native/data/etc/android.hardware.wifi.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.hardware.wifi.xml
+PRODUCT_VENDOR_PROPERTIES += wifi.interface=wlan0
 
-# Rede cabeada por adaptador USB (o Wi-Fi AIC8800 ainda não funciona no kernel Android).
+# Rede cabeada por adaptador USB, além do Wi-Fi.
 PRODUCT_COPY_FILES += \
     frameworks/native/data/etc/android.hardware.ethernet.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.hardware.ethernet.xml
 
 # TODO(marcos seguintes, ver docs/lineageos.md):
 #  - áudio: HAL AIDL de referência com tinyalsa no card 0 (I2S1, codec mudo);
-#  - Wi-Fi (driver AIC8800 no kernel Android) e Bluetooth (UART ttyS1, HAL AIDL padrão);
+#  - Bluetooth (UART ttyS1, HAL AIDL padrão);
 #  - sensores: acelerômetro SC7A20 (keystone automático do app);
 #  - patch de keystone no SurfaceFlinger (o app já grava as props persist.sys.keystone.*).

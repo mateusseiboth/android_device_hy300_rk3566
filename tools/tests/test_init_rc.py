@@ -111,6 +111,20 @@ class InitRcTest(unittest.TestCase):
         service = self.services["hy300-diag"]
         self.assertTrue(service.get("command", "").startswith("/system/bin/sh "), service)
 
+    def test_net_starts_after_boot_completed_only_on_userdebug(self):
+        actions = self.actions_starting("hy300-net")
+        self.assertEqual(len(actions), 1)
+        event, props = split_trigger(actions[0]["trigger"])
+        self.assertIsNone(event)
+        self.assertEqual(props.get("sys.boot_completed"), "1")
+        self.assertEqual(props.get("ro.build.type"), "userdebug")
+        self.assertTrue(self.services["hy300-net"]["command"].startswith("/system/bin/sh "))
+
+    def test_wifi_modules_load_in_background_on_boot(self):
+        actions = self.actions_starting("hy300-wifi-modules")
+        self.assertEqual([split_trigger(a["trigger"])[0] for a in actions], ["boot"])
+        self.assertIn("oneshot", self.services["hy300-wifi-modules"]["lines"])
+
     def test_cmdline_property_triggers_match_board_cmdline(self):
         cmdline = read_cmdline_props()
         for action in self.actions:

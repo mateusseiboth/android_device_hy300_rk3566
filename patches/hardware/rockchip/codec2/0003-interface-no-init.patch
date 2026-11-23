@@ -1,0 +1,13 @@
+HY300: o serviço Codec2 declara as "interface" HIDL no init.
+
+diff --git a/services/android.hardware.media.c2@1.1-service.rc b/services/android.hardware.media.c2@1.1-service.rc
+index 95a1648..d009bd7 100644
+--- a/services/android.hardware.media.c2@1.1-service.rc
++++ b/services/android.hardware.media.c2@1.1-service.rc
+@@ -1,4 +1,6 @@
+ service android-hardware-media-c2-hal-1-1 /vendor/bin/hw/android.hardware.media.c2@1.1-service
++    interface android.hardware.media.c2@1.0::IComponentStore default
++    interface android.hardware.media.c2@1.1::IComponentStore default
+     class hal
+     user mediacodec
+     group camera mediadrm drmrpc system

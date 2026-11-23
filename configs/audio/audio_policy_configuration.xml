@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<!--
+    SPDX-FileCopyrightText: 2026 Mateus Seiboth
+    SPDX-License-Identifier: Apache-2.0
+
+    Configuração de áudio do HY300 (/vendor/etc). É lida pelo AudioPolicyManager e também pelo
+    HAL AIDL de exemplo do AOSP (com.android.hardware.audio), que registra um IModule para cada
+    módulo daqui: "primary" vira IModule/default, "r_submix" vira IModule/r_submix. Sem este
+    arquivo o HAL não registrava nenhum módulo e o audioserver esperava o IModule/default para
+    sempre (boot 3). Só os módulos declarados no VINTF do APEX de áudio podem aparecer aqui.
+-->
+<audioPolicyConfiguration version="7.0" xmlns:xi="http://www.w3.org/2001/XInclude">
+    <globalConfiguration speaker_drc_enabled="false"/>
+
+    <modules>
+        <xi:include href="hy300_primary_audio_policy_configuration.xml"/>
+        <xi:include href="r_submix_audio_policy_configuration.xml"/>
+    </modules>
+
+    <xi:include href="audio_policy_volumes.xml"/>
+    <xi:include href="default_volume_tables.xml"/>
+    <xi:include href="surround_sound_configuration_5_0.xml"/>
+</audioPolicyConfiguration>

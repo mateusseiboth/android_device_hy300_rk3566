@@ -14,6 +14,12 @@ obj/PACKAGING/check_vintf_all_intermediates/apex/*/etc/vintf. A lista do que é 
 quê fica em configs/vintf/required_hals.txt (uma instância por linha: pacote.Interface/instância
 e o motivo).
 
+Também confere que todo HAL AIDL/HIDL declarado tem um serviço do init com a "interface"
+correspondente (vendor/etc/init, odm/etc/init e os .rc dos APEX de vendor): é o que o
+servicemanager usa para subir o serviço sob demanda. No boot 3 o audioserver pediu o
+IModule/default 91 vezes e o init não tinha a quem pedir. HALs "native" (mapper) não passam pelo
+servicemanager e ficam de fora.
+
 Uso: tools/check_vintf_hals.py <out/target/product/hy300> [--required arquivo]
 """
 import argparse
@@ -33,6 +39,15 @@ MANIFEST_GLOBS = (
 )
 
 
+RC_GLOBS = (
+    "vendor/etc/init/*.rc",
+    "vendor/etc/init/hw/*.rc",
+    "odm/etc/init/*.rc",
+    "obj/PACKAGING/check_vintf_all_intermediates/apex/*/etc/*.rc",
+)
+SERVICE_FORMATS = ("aidl", "hidl")
+
+
 def read_hal_instances(hal):
     name = hal.findtext("name", "").strip()
     found = set()
@@ -46,23 +61,53 @@ def read_hal_instances(hal):
     return found
 
 
-def read_manifest(path):
+def read_manifest(path, formats=None):
     try:
         root = ET.parse(path).getroot()
     except ET.ParseError:
         return set()
     found = set()
     for hal in root.iter("hal"):
-        found |= read_hal_instances(hal)
+        if formats is None or hal.get("format", "hidl") in formats:
+            found |= read_hal_instances(hal)
     return found
 
 
-def find_declared(out):
+def find_declared(out, formats=None):
     found = set()
     for pattern in MANIFEST_GLOBS:
         for path in sorted(glob.glob(os.path.join(out, pattern))):
-            found |= read_manifest(path)
+            found |= read_manifest(path, formats)
     return found
+
+
+def parse_interface_line(words):
+    # "interface aidl pacote.IFoo/instância" ou "interface pacote@1.1::IFoo instância"
+    if len(words) == 3 and words[1] == "aidl":
+        return words[2]
+    if len(words) == 3 and "::" in words[1]:
+        package, _, iface = words[1].partition("::")
+        return f"{package.partition('@')[0]}.{iface}/{words[2]}"
+    return None
+
+
+def find_init_interfaces(out):
+    found = set()
+    for pattern in RC_GLOBS:
+        for path in sorted(glob.glob(os.path.join(out, pattern))):
+            with open(path, errors="replace") as f:
+                for line in f:
+                    words = line.split()
+                    if words and words[0] == "interface":
+                        name = parse_interface_line(words)
+                        if name:
+                            found.add(name)
+    return found
+
+
+def find_without_init_service(out):
+    declared = find_declared(out, SERVICE_FORMATS)
+    return sorted(declared - find_init_interfaces(out))
 
 
 def read_required(path):
@@ -91,9 +136,12 @@ def main(argv=None):
     missing = find_missing(args.out, required)
     for name, reason in missing:
         print(f"FALTA {name}: {reason}")
-    if missing:
+    orphans = find_without_init_service(args.out)
+    for name in orphans:
+        print(f"SEM SERVIÇO {name}: declarado no VINTF, nenhum .rc tem \"interface\" para ele")
+    if missing or orphans:
         return 1
-    print(f"ok: {len(required)} HALs obrigatórios declarados")
+    print(f"ok: {len(required)} HALs obrigatórios declarados; todo HAL declarado tem serviço no init")
     return 0
 
 

@@ -1,0 +1,12 @@
+HY300: o allocator do minigbm declara a "interface" no init.
+
+diff --git a/cros_gralloc/aidl/allocator.rc b/cros_gralloc/aidl/allocator.rc
+index 24a7c45..646db7a 100644
+--- a/cros_gralloc/aidl/allocator.rc
++++ b/cros_gralloc/aidl/allocator.rc
+@@ -1,4 +1,5 @@
+ service vendor.graphics.allocator /vendor/bin/hw/android.hardware.graphics.allocator-service.minigbm
++    interface aidl android.hardware.graphics.allocator.IAllocator/default
+     class hal animation
+     user system
+     group graphics drmrpc

@@ -292,43 +292,77 @@ class StayMarkTest(DiagTestBase):
 
 
 class WifiTest(DiagTestBase):
-    def test_wifi_test_records_scan_count_without_names(self):
-        lib = os.path.join(self.tmp, "hy300-wifi.sh")
-        with open(lib, "w") as f:
-            f.write("has_wifi_card() { return 0; }\n"
-                    "load_wifi_modules() { echo \"load $1 $2\"; }\n"
-                    "wait_for_wireless_iface() { echo wlan0; }\n"
-                    "dump_sdio_state() { echo sdio; }\n"
-                    "recover_wifi_chip() { return 0; }\n")
-        self.fake("iw", '#!/bin/sh\necho "iw $*" >>"$FAKE_CALLS"\n'
-                        'printf "BSS aa:bb:cc:dd:ee:01(on wlan0)\\n\\tSSID: Vizinho\\n'
-                        'BSS aa:bb:cc:dd:ee:02(on wlan0)\\n\\tSSID: Outro\\n"\n')
-        d = os.path.join(self.tmp, "boot")
-        os.makedirs(d)
-        r = self.run_lib(f'run_wifi_test "{d}"', HY300_DIAG_WIFI_LIB=lib)
-        self.assertEqual(r.returncode, 0, r.stderr)
-        report = self.read(d, "wifi.txt")
-        self.assertIn("redes no scan: 2", report)
-        self.assertNotIn("Vizinho", report)
-        self.assertNotIn("aa:bb:cc", report)
-        self.assertIn("iw dev wlan0 scan", self.calls_text())
+    """Os módulos do AIC8800 sobem pelo init (hy300-wifi-modules) e o Wi-Fi é do Android. O diag só
+    registra o estado; carrega os módulos ele mesmo só se a interface não aparecer."""
 
-    def test_wifi_test_reports_missing_interface(self):
+    def write_lib(self, iface_found):
         lib = os.path.join(self.tmp, "hy300-wifi.sh")
+        wait = "echo wlan0" if iface_found else "return 1"
         with open(lib, "w") as f:
             f.write("has_wifi_card() { return 0; }\n"
-                    "load_wifi_modules() { echo load; }\n"
-                    "wait_for_wireless_iface() { return 1; }\n"
+                    "load_wifi_modules() { echo \"load $1 $2\" >>\"$FAKE_CALLS\"; }\n"
+                    f"wait_for_wireless_iface() {{ {wait}; }}\n"
                     "dump_sdio_state() { echo estado-sdio; }\n"
                     "recover_wifi_chip() { echo religado; }\n"
                     "unload_wifi_modules() { return 0; }\n")
+        return lib
+
+    def test_records_state_without_loading_or_scanning_when_init_loaded_the_driver(self):
+        self.fake("iw", '#!/bin/sh\necho "iw $*" >>"$FAKE_CALLS"\n'
+                        'printf "Connected to aa:bb:cc:dd:ee:01 (on wlan0)\\n\\tSSID: Casa\\n'
+                        '\\tsignal: -50 dBm\\n"\n')
         d = os.path.join(self.tmp, "boot")
         os.makedirs(d)
-        self.run_lib(f'run_wifi_test "{d}"', HY300_DIAG_WIFI_LIB=lib)
+        r = self.run_lib(f'run_wifi_test "{d}"', HY300_DIAG_WIFI_LIB=self.write_lib(True))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        report = self.read(d, "wifi.txt")
+        self.assertIn("interface wlan0", report)
+        self.assertIn("signal: -50 dBm", report)
+        self.assertNotIn("Casa", report)
+        self.assertNotIn("aa:bb:cc", report)
+        calls = self.calls_text()
+        self.assertNotIn("load ", calls)
+        self.assertNotIn("scan", calls)
+
+    def test_loads_and_recovers_when_the_interface_never_shows_up(self):
+        d = os.path.join(self.tmp, "boot")
+        os.makedirs(d)
+        self.run_lib(f'run_wifi_test "{d}"', HY300_DIAG_WIFI_LIB=self.write_lib(False))
         report = self.read(d, "wifi.txt")
         self.assertIn("sem interface sem fio", report)
         self.assertIn("estado-sdio", report)
         self.assertIn("religado", report)
+        self.assertIn("load ", self.calls_text())
+
+
+class NetworkAdbTest(DiagTestBase):
+    """O retorno aos 480 s só acontece se o adb pela rede NÃO estiver de pé: com o adbd na porta
+    5555 e IP no wlan0, quem conduz é o adb."""
+
+    def set_network_adb(self, adbd, port, ip_output):
+        self.set_props(**{"ro.build.type": "userdebug", "ro.boot.hy300.diag": "1",
+                          "init.svc.adbd": adbd, "service.adb.tcp.port": port})
+        self.fake("ip", f'#!/bin/sh\necho "ip $*" >>"$FAKE_CALLS"\nprintf "{ip_output}"\n')
+
+    def test_up_with_adbd_port_and_ipv4(self):
+        self.set_network_adb("running", "5555", "    inet 192.0.2.10/24 brd 192.0.2.255 scope global wlan0\\n")
+        self.assertEqual(self.run_lib("is_network_adb_up").returncode, 0)
+
+    def test_down_without_ipv4(self):
+        self.set_network_adb("running", "5555", "")
+        self.assertNotEqual(self.run_lib("is_network_adb_up").returncode, 0)
+
+    def test_down_without_tcp_port(self):
+        self.set_network_adb("running", "", "    inet 192.0.2.10/24 scope global wlan0\\n")
+        self.assertNotEqual(self.run_lib("is_network_adb_up").returncode, 0)
+
+    def test_main_does_not_reboot_when_network_adb_is_up(self):
+        self.set_network_adb("running", "5555", "    inet 192.0.2.10/24 scope global wlan0\\n")
+        self.set_uptime(500)
+        r = self.run_main(HY300_DIAG_REBOOT_AFTER="480", HY300_DIAG_MAX_LOOPS="1")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertNotIn("setprop sys.powerctl reboot", self.calls_text())
+        self.assertIn("adb pela rede no ar", self.read(self.root, "1", "diag.txt"))
 
 
 if __name__ == "__main__":

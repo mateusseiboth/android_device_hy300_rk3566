@@ -76,5 +76,20 @@ class ApplyPatchesTest(unittest.TestCase):
             apply_patches.apply_all(self.top, self.patches)
 
 
+class TreePatchesTest(unittest.TestCase):
+    """Os patches da árvore têm de ser diffs de verdade: um deles chegou a ser gravado com o resumo
+    que um wrapper do git imprime no lugar do diff, e o apply_patches.py só acusou no checkout."""
+
+    def test_every_patch_of_the_tree_is_a_git_diff(self):
+        found = apply_patches.find_patches(apply_patches.PATCHES_DIR)
+        self.assertTrue(found)
+        for project, patches in found.items():
+            for patch in patches:
+                with open(patch) as f:
+                    text = f.read()
+                self.assertIn("\ndiff --git a/", text, patch)
+                self.assertNotIn("--- Changes ---", text, patch)
+
+
 if __name__ == "__main__":
     unittest.main()

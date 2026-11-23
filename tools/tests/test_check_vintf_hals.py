@@ -115,12 +115,74 @@ class CheckVintfTest(unittest.TestCase):
 
     def test_main_fails_with_missing_list(self):
         self.write("vendor/etc/vintf/manifest.xml", AIDL_INTERFACE)
+        self.write("vendor/etc/init/h.rc", "service h /vendor/bin/h\n"
+                   "    interface aidl android.hardware.health.IHealth/default\n"
+                   "    interface android.hardware.media.c2@1.1::IComponentStore default\n"
+                   "    interface android.hardware.media.c2@1.1::IComponentStore software\n")
         req = os.path.join(self.out, "req.txt")
         with open(req, "w") as f:
             f.write("android.hardware.power.IPower/default HintManagerService\n")
         self.assertEqual(check_vintf_hals.main([self.out, "--required", req]), 1)
         with open(req, "w") as f:
             f.write("android.hardware.health.IHealth/default BatteryService\n")
+        self.assertEqual(check_vintf_hals.main([self.out, "--required", req]), 0)
+
+
+class InitInterfaceTest(unittest.TestCase):
+    """Todo HAL AIDL/HIDL declarado no VINTF precisa de um serviço do init com a "interface"
+    correspondente: é o que o servicemanager usa para subir o serviço sob demanda. No boot 3 o
+    audioserver pediu o IModule/default 91 vezes e o init respondeu "Could not find
+    'aidl/android.hardware.audio.core.IModule/default' for ctl.interface_start"."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.out = self.tmp.name
+
+    def write(self, rel, text):
+        path = os.path.join(self.out, rel)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w") as f:
+            f.write(text)
+
+    def test_reads_aidl_and_hidl_interface_lines_from_vendor_and_apex(self):
+        self.write("vendor/etc/init/power.rc",
+                   "service vendor.power /vendor/bin/hw/power\n"
+                   "    interface aidl android.hardware.power.IPower/default\n")
+        self.write("obj/PACKAGING/check_vintf_all_intermediates/apex/x/etc/c2.rc",
+                   "service c2 /apex/x/bin/c2\n"
+                   "    interface android.hardware.media.c2@1.1::IComponentStore default\n")
+        found = check_vintf_hals.find_init_interfaces(self.out)
+        self.assertIn("android.hardware.power.IPower/default", found)
+        self.assertIn("android.hardware.media.c2.IComponentStore/default", found)
+
+    def test_declared_hal_without_init_interface_is_reported(self):
+        self.write("vendor/etc/vintf/manifest/a.xml", AIDL_FQNAME + "")
+        self.write("vendor/etc/init/other.rc", "service x /vendor/bin/x\n    class hal\n")
+        self.assertEqual(check_vintf_hals.find_without_init_service(self.out),
+                         ["android.hardware.power.IPower/default"])
+
+    def test_native_hals_do_not_need_init_services(self):
+        self.write("vendor/etc/vintf/manifest/m.xml", """<manifest version="1.0" type="device">
+    <hal format="native">
+        <name>mapper</name>
+        <version>5.0</version>
+        <interface>
+            <instance>minigbm</instance>
+        </interface>
+    </hal>
+</manifest>
+""")
+        self.assertEqual(check_vintf_hals.find_without_init_service(self.out), [])
+
+    def test_main_fails_when_a_declared_hal_has_no_service(self):
+        self.write("vendor/etc/vintf/manifest/a.xml", AIDL_FQNAME)
+        req = os.path.join(self.out, "req.txt")
+        with open(req, "w") as f:
+            f.write("android.hardware.power.IPower/default HintManagerService\n")
+        self.assertEqual(check_vintf_hals.main([self.out, "--required", req]), 1)
+        self.write("vendor/etc/init/power.rc",
+                   "service p /vendor/bin/p\n    interface aidl android.hardware.power.IPower/default\n")
         self.assertEqual(check_vintf_hals.main([self.out, "--required", req]), 0)
 
 

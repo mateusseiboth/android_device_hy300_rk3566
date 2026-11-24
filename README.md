@@ -1,7 +1,7 @@
 # device/txcz/hy300: LineageOS 24.0 (Android 17) para o projetor HY300
 
 Árvore de dispositivo do HY300 (Rockchip RK3566, 1,5 GB de RAM, painel LVDS 1024x600, TXCZ
-y356tx): LineageOS para TV, 64 bits, low-RAM, FCM 8, GPU aberta (Mesa Panfrost + drm_hwcomposer +
+y356tx): LineageOS para TV, 64 + 32 bits, low-RAM, FCM 8, GPU aberta (Mesa Panfrost + drm_hwcomposer +
 minigbm) e vídeo por hardware (Codec2 da Rockchip sobre o MPP). O plano, o inventário do aparelho,
 como gravar e os riscos estão em `docs/lineageos.md` do repositório do projeto (`hy300-rk3566`).
 Aqui fica só o porquê de cada arquivo.
@@ -25,6 +25,7 @@ device/txcz/hy300/tools/apply_patches.py .            # patches/ nos projetos de
 device/txcz/hy300/tools/build-mesa-host-tools.sh .    # mesa_clc e panfrost_compile (host)
 export PATH="$HOME/hy300-work/mesa-host/install/bin:$PATH"
 export ALLOW_MISSING_DEPENDENCIES=true GOMEMLIMIT=20GiB SOONG_INCREMENTAL_ANALYSIS=false
+export BUILD_USERNAME=mateusseiboth BUILD_HOSTNAME=build   # ro.build.user/host
 # prebuilt/: kernel/build-lineage-kernel.sh do repositório do projeto (ver abaixo)
 source build/envsetup.sh
 lunch lineage_hy300-cp2a-userdebug                    # = breakfast hy300
@@ -38,7 +39,7 @@ python3 -I -m unittest discover -s device/txcz/hy300/tools/tests
 |---|---|---|
 | `AndroidProducts.mk` | lista de produtos | um produto só, `lineage_hy300`; a release `cp2a` vem de `vendor/lineage/vars/aosp_target_release` |
 | `lineage_hy300.mk` | produto | Android TV do LineageOS: `atv_base.mk` + `common_full_tv.mk` (que traz `device/lineage/atv`, TvSettingsTwoPanel, LeanbackIME e o launcher Catapult), mais `atv_lowram_defaults.mk` para 1,5 GB. Mesmo esquema dos aparelhos ATV do Lineage |
-| `device.mk` | pacotes, cópias, props | só 64 bits (`core_64_bit_only.mk`, um zygote); `PRODUCT_SHIPPING_API_LEVEL := 31` (Android 12 de fábrica); gráficos abertos, Codec2/MPP, KeyMint/Gatekeeper/health por software, lmkd |
+| `device.mk` | pacotes, cópias, props | 64 + 32 bits (`core_64_bit.mk`, zygote64_32 com o de 32 bits em lazy preload) para apps de TV que só publicam armeabi-v7a; `PRODUCT_SHIPPING_API_LEVEL := 31` (Android 12 de fábrica); gráficos abertos, Codec2/MPP, KeyMint/Gatekeeper/health por software, lmkd |
 | `BoardConfig.mk` | placa | ver "Boot" e "Partições" |
 | `configs/init/fstab.rk3566` | fstab | derivado do `fstab.rk30board` de fábrica (diferenças no topo do arquivo) |
 | `configs/init/init.rk3566.rc` | init da placa | `mount_all`, zram, permissões do motor de foco (`/sys/class/motor_cc`) e dos LEDs para o app de configurações (uid system) |
@@ -49,7 +50,7 @@ python3 -I -m unittest discover -s device/txcz/hy300/tools/tests
 | `tools/mkbootimg_hy300.py` | wrapper do mkbootimg | recalcula o ID SHA-1 que o U-Boot confere (testes em `tools/tests/`) |
 | `tools/apply_patches.py` | patches nos projetos de fora | `patches/<caminho>/NNNN-*.patch` com `git apply`; idempotente; rodar depois de cada `repo sync` |
 | `tools/build-mesa-host-tools.sh` | ferramentas de host do Mesa | `mesa_clc`, `vtn_bindgen2` e `panfrost_compile` da mesma fonte do `external/mesa3d`, com LLVM 22 |
-| `configs/media/` | lista de codecs | `c2.rk.*` (H.264, HEVC, VP9, VP8, MPEG-2, MPEG-4, H.263) até 1920x1088 |
+| `configs/media/` | lista de codecs | `c2.rk.*` (H.264, HEVC, VP9, VP8, MPEG-2, MPEG-4, H.263) até 1920x1088; AV1 de software desligado (o RK3566 não tem AV1 em hardware e os A55 não decodificam em tempo real) |
 | `patches/hardware/rockchip/codec2` | Codec2 da Rockchip | sem blobs do vendor e sem NPU (0001); gralloc genérico: decodifica nos buffers do MPP e copia pela RGA para NV12 do minigbm (0002) |
 | `patches/hardware/rockchip/librga` | librga | compilada do fonte, só a API por fd (no Lineage-Rockchip ela vem dos blobs) |
 
@@ -105,6 +106,10 @@ O app ganha o gid pela permissão de assinatura `FOCUS_MOTOR` que ele declara
 - **Userdebug**: `configs/init/hy300-net.sh` instala a chave do adb e conecta o Wi-Fi a partir de
   `/metadata/hy300-diag/{adb_keys,wifi.conf}` (gravados pelo Alpine; formato em
   `docs/lineageos.md` do projeto) e liga o adb pela rede na porta 5555, com autenticação.
+- `tools/check_vendor_32bit.py`: bibliotecas do vendor carregadas no processo do app (same-process)
+  existem em `lib64/` e `lib/`.
+- `patches/test/cts-root/0001`: o teste de root da bionic só na primeira arquitetura (com a
+  segunda, o kati parava em "cannot copy target from multiple modules").
 - `tools/check_vintf_hals.py`: HALs obrigatórios e uma `interface` no init para cada HAL
   declarado.
 - **Perfil** (`androidboot.hy300.perfil` na cmdline): `teste` (padrão: diag e adb pela rede

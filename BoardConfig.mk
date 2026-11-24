@@ -9,11 +9,20 @@
 
 DEVICE_PATH := device/txcz/hy300
 
-# Arquitetura: só 64 bits (core_64_bit_only.mk no device.mk). A55 x4.
+# Arquitetura: 64 + 32 bits (core_64_bit.mk no device.mk, zygote64_32). A55 x4, que roda AArch32.
+# O modo misto existe para apps de TV que só publicam armeabi-v7a. Os HALs (processos próprios)
+# continuam só em 64 bits; o que o app carrega no próprio processo (Mesa, mapper, Vulkan) sai nas
+# duas (tools/check_vendor_32bit.py).
 TARGET_ARCH := arm64
 TARGET_ARCH_VARIANT := armv8-2a
 TARGET_CPU_ABI := arm64-v8a
 TARGET_CPU_VARIANT := cortex-a55
+
+TARGET_2ND_ARCH := arm
+TARGET_2ND_ARCH_VARIANT := armv8-2a
+TARGET_2ND_CPU_ABI := armeabi-v7a
+TARGET_2ND_CPU_ABI2 := armeabi
+TARGET_2ND_CPU_VARIANT := cortex-a55
 
 TARGET_BOARD_PLATFORM := rk356x
 TARGET_BOOTLOADER_BOARD_NAME := rk30board

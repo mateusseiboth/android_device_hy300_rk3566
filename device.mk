@@ -5,8 +5,9 @@
 
 DEVICE_PATH := device/txcz/hy300
 
-# Só 64 bits: um zygote só (zygote64) cabe melhor em 1,5 GB que o par 64/32.
-$(call inherit-product, $(SRC_TARGET_DIR)/product/core_64_bit_only.mk)
+# 64 + 32 bits (rodada 14): zygote64_32. O zygote de 32 bits sobe com --enable-lazy-preload
+# (init.zygote64_32.rc do AOSP) e só pré-carrega classes quando o primeiro app de 32 bits abre.
+$(call inherit-product, $(SRC_TARGET_DIR)/product/core_64_bit.mk)
 
 # A fábrica saiu com Android 12 (ro.product.first_api_level=31).
 PRODUCT_SHIPPING_API_LEVEL := 31

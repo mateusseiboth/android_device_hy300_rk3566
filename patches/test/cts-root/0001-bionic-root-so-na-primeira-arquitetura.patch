@@ -1,0 +1,21 @@
+HY300: CtsBionicRootTestCases só na primeira arquitetura.
+Com a segunda arquitetura (arm) as duas variantes do teste copiavam o mesmo diretório
+testcases/CtsBionicRootTestCases da suíte cts_root e o kati parava em "cannot copy target from
+multiple modules" (definitions.mk, _copied-target-license-metadata-rule). O teste não vai para a
+imagem.
+
+diff --git a/tests/bionic/Android.bp b/tests/bionic/Android.bp
+index 62e8102..d739b90 100644
+--- a/tests/bionic/Android.bp
++++ b/tests/bionic/Android.bp
+@@ -7,6 +7,10 @@ cc_test {
+ 
+     defaults: ["cts_bionic_defaults"],
+ 
++    // HY300 (64 + 32 bits): as duas variantes copiavam o mesmo testcases/CtsBionicRootTestCases
++    // do cts_root e o kati parava ("cannot copy target from multiple modules"). Só a primeira.
++    compile_multilib: "first",
++
+     test_suites: [
+         "cts_root",
+     ],

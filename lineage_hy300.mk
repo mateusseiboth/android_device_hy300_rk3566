@@ -20,6 +20,10 @@ TARGET_SUPPORTS_OMX_SERVICE := false
 # (androidboot.hy300.perfil) continua decidindo se o adb liga. Antes dos inherit-product.
 TARGET_USERDEBUG_DEBUGGABLE := true
 
+# Idioma padrão pt-BR: o primeiro de PRODUCT_LOCALES vira ro.product.locale, e o produto de topo
+# vem antes dos herdados (o full_base.mk põe en_US).
+PRODUCT_LOCALES := pt_BR en_US
+
 # Memória baixa (1,5 GB): perfis de boot e lowram do ATV. Tem que vir antes do device.mk
 # para que os valores do aparelho possam sobrescrever.
 $(call inherit-product, device/google/atv/products/atv_lowram_defaults.mk)

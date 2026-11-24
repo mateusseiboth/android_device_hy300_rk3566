@@ -346,5 +346,85 @@ class DebuggableTest(unittest.TestCase):
             self.assertIn("ro.debuggable=1", props)
 
 
+class MixedAbiTest(unittest.TestCase):
+    """Rodada 14: 64 + 32 bits para apps de TV que só publicam armeabi-v7a."""
+
+    def test_second_arch_is_arm_on_the_a55(self):
+        board = read(os.path.join(TREE, "BoardConfig.mk"))
+        for line in ("TARGET_2ND_ARCH := arm", "TARGET_2ND_ARCH_VARIANT := armv8-2a",
+                     "TARGET_2ND_CPU_ABI := armeabi-v7a", "TARGET_2ND_CPU_ABI2 := armeabi",
+                     "TARGET_2ND_CPU_VARIANT := cortex-a55"):
+            self.assertIn(line, board)
+
+    def test_cts_root_bionic_test_is_first_arch_only(self):
+        # Com a segunda arquitetura o kati parava em "cannot copy target from multiple modules"
+        # (testcases/CtsBionicRootTestCases do cts_root, uma cópia por variante).
+        patch = read(os.path.join(TREE, "patches", "test", "cts-root",
+                                  "0001-bionic-root-so-na-primeira-arquitetura.patch"))
+        self.assertIn('+    compile_multilib: "first",', patch)
+
+    def test_zygote64_32(self):
+        mk = read(os.path.join(TREE, "device.mk"))
+        self.assertIn("$(call inherit-product, $(SRC_TARGET_DIR)/product/core_64_bit.mk)", mk)
+        self.assertNotIn("core_64_bit_only.mk", mk)
+
+    @unittest.skipUnless(os.path.exists(os.path.join(OUT, "system", "build.prop")),
+                         "sem imagem montada")
+    def test_built_image_lists_32bit_abis(self):
+        system = read(os.path.join(OUT, "system", "build.prop"))
+        vendor = read(os.path.join(OUT, "vendor", "build.prop"))
+        self.assertRegex(system + vendor, r"ro\.(system|vendor)\.product\.cpu\.abilist32=armeabi-v7a,armeabi")
+        self.assertIn("ro.zygote=zygote64_32", vendor)
+
+
+class LocaleTest(unittest.TestCase):
+    def test_pt_br_is_the_default_locale(self):
+        # O primeiro de PRODUCT_LOCALES vira ro.product.locale; o produto de topo vem antes dos
+        # herdados (o full_base.mk põe en_US).
+        text = read(os.path.join(TREE, "lineage_hy300.mk"))
+        self.assertRegex(text, r"(?m)^PRODUCT_LOCALES := pt_BR\b")
+
+    @unittest.skipUnless(os.path.exists(os.path.join(OUT, "system", "build.prop")),
+                         "sem imagem montada")
+    def test_built_image_defaults_to_pt_br(self):
+        self.assertIn("ro.product.locale=pt-BR", read(os.path.join(OUT, "system", "build.prop")))
+
+
+class NetflixTvFeaturesTest(unittest.TestCase):
+    """A Netflix de TV (com.netflix.ninja) foi testada na rodada 14 e para no erro -13 (aparelho sem
+    certificação Netflix). As features que ela exige não são declaradas: o aparelho não finge o que
+    não é."""
+
+    def test_no_netflix_tv_features_file(self):
+        self.assertFalse(os.path.exists(os.path.join(TREE, "configs", "permissions",
+                                                     "hy300-netflix-tv-test.xml")))
+
+    def test_device_does_not_declare_netflix_features(self):
+        mk = read(os.path.join(TREE, "device.mk"))
+        self.assertNotIn("HY300_NETFLIX_TV_FEATURES", mk)
+        self.assertNotIn("hy300-netflix-tv-test.xml", mk)
+
+    def test_gles_stays_honest(self):
+        self.assertIn("ro.opengles.version=196609", read(os.path.join(TREE, "device.mk")))
+
+
+class SoftwareAv1Test(unittest.TestCase):
+    """Rodada 14: o YouTube escolhia o AV1 de software (c2.android.av1-dav1d.decoder, media.swcodec a
+    194 % de CPU) e o vídeo travava. O RK3566 não tem AV1 em hardware e os A55 não dão conta em
+    tempo real: os dois decoders AV1 de software ficam desligados no media_codecs do vendor."""
+
+    def test_software_av1_decoders_are_disabled(self):
+        root = ET.parse(os.path.join(TREE, "configs", "media", "media_codecs.xml")).getroot()
+        decoders = {c.get("name"): c for c in root.iter("MediaCodec")}
+        for name in ("c2.android.av1-dav1d.decoder", "c2.android.av1.decoder"):
+            self.assertEqual(decoders[name].get("update"), "true", name)
+            self.assertEqual(decoders[name].get("enabled"), "false", name)
+
+    def test_hw_decoders_stay(self):
+        text = read(os.path.join(TREE, "configs", "media", "media_codecs.xml"))
+        self.assertLess(text.index('<Include href="media_codecs_c2_rk.xml" />'),
+                        text.index("c2.android.av1-dav1d.decoder"))
+
+
 if __name__ == "__main__":
     unittest.main()

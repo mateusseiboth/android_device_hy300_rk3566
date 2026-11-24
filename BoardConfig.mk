@@ -138,9 +138,10 @@ BOARD_AVB_ENABLE := false
 TARGET_RECOVERY_FSTAB := $(DEVICE_PATH)/configs/init/fstab.rk3566
 TARGET_RECOVERY_PIXEL_FORMAT := RGBX_8888
 
-# Tela: painel LVDS 1024x600 renderizado nativo. 170 dpi dá ~963x564 dp, o mínimo de
-# 960x540 dp que as telas Leanback esperam. Confirmar visualmente.
-TARGET_SCREEN_DENSITY := 170
+# Tela: painel LVDS 1024x600 renderizado nativo. 160 dpi dá 1024x600 dp (sw600dp): acima dos
+# 960x540 dp que as telas Leanback esperam e tela grande para o framework, que então ignora o
+# pedido de orientação dos apps (a Netflix de celular abre em paisagem, ver configs/appcompat).
+TARGET_SCREEN_DENSITY := 160
 
 # VINTF: o kernel 6.1 só é aceito pela matriz de FCM nível 8 (Android 14) no Android 17.
 DEVICE_MANIFEST_FILE := $(DEVICE_PATH)/configs/vintf/manifest.xml

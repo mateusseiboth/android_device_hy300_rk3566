@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    SPDX-FileCopyrightText: 2026 Mateus Seiboth
+    SPDX-License-Identifier: Apache-2.0
+
+    Overrides estáticos do platform compat (CompatConfig lê de /product/etc/appcompat e copia para
+    /data/misc/appcompat). 310816437 = OVERRIDE_ANY_ORIENTATION_TO_USER: a Netflix de celular trava
+    em retrato; com o override e a tela grande (sw600dp, 160 dpi) ela segue a orientação do aparelho
+    e usa o layout de tablet.
+-->
+<overrides>
+    <change-overrides changeId="310816437">
+        <raw>
+            <raw-override-value packageName="com.netflix.mediaclient" enabled="true" />
+        </raw>
+    </change-overrides>
+</overrides>

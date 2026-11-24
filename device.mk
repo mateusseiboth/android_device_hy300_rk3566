@@ -100,6 +100,17 @@ PRODUCT_VENDOR_PROPERTIES += \
     debug.renderengine.backend=skiaglthreaded \
     ro.surface_flinger.max_frame_buffer_acquired_buffers=3
 
+# Composição toda pela GPU: os planos de overlay do VOP2 pelo drm_hwcomposer garbavam a imagem
+# (downscale além do limite do VOP, como 1920x1080 para 418x235, e o plano Smart com a Netflix de
+# 352 de largura sob o mouse) e a troca de plano fazia a tela piscar ao navegar no YouTube.
+PRODUCT_VENDOR_PROPERTIES += \
+    vendor.hwc.drm.scale_with_gpu=1 \
+    ro.vendor.hwc.use_overlay_planes=0
+
+# Overrides de compatibilidade por app (Netflix de celular em paisagem).
+PRODUCT_COPY_FILES += \
+    $(DEVICE_PATH)/configs/appcompat/compat_framework_overrides.xml:$(TARGET_COPY_OUT_PRODUCT)/etc/appcompat/compat_framework_overrides.xml
+
 # Vídeo por hardware: Codec2 da Rockchip (hardware/rockchip/codec2) sobre o MPP
 # (hardware/rockchip/libmpp, kernel mpp_service), com cópia pela RGA (librga) para os buffers do
 # minigbm. Tudo compilado do fonte; os patches que a árvore aplica estão em patches/. Os codecs

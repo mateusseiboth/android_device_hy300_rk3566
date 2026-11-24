@@ -63,7 +63,13 @@ python3 -I -m unittest discover -s device/txcz/hy300/tools/tests
   `early-init`, antes do allocator e do composer.
 - **minigbm "generic"** sem patch: o rockchip é driver dumb no minigbm, e o kernel Android
   permite `CREATE_DUMB` no render node. O Panfrost importa os buffers por dma-buf.
-- **drm_hwcomposer** (HWC3) do AOSP, no `card0` (VOP2, LVDS).
+- **drm_hwcomposer** (HWC3) do AOSP, no `card0` (VOP2, LVDS), com a composição toda pela GPU
+  (`ro.vendor.hwc.use_overlay_planes=0`, `vendor.hwc.drm.scale_with_gpu=1`): os planos de overlay
+  do VOP2 garbavam a imagem no downscale e com camadas estreitas, e a troca de plano fazia a tela
+  piscar.
+- **160 dpi**: 1024x600 dp, sw600dp. O framework trata como tela grande e ignora o pedido de
+  orientação dos apps; com o override de `configs/appcompat/` a Netflix de celular abre em
+  paisagem com o layout de tablet.
 
 ## Vídeo por hardware
 

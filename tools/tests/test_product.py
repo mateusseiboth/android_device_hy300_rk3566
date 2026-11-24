@@ -408,6 +408,61 @@ class NetflixTvFeaturesTest(unittest.TestCase):
         self.assertIn("ro.opengles.version=196609", read(os.path.join(TREE, "device.mk")))
 
 
+class GpuCompositionTest(unittest.TestCase):
+    """Rodada 15: os planos de overlay do VOP2 pelo drm_hwcomposer garbavam a imagem (downscale além
+    do limite do VOP e plano Smart com a Netflix de 352 de largura). Tudo é composto pela GPU."""
+
+    def test_scaling_goes_to_the_gpu(self):
+        self.assertEqual(read_vendor_props().get("vendor.hwc.drm.scale_with_gpu"), "1")
+
+    def test_overlay_planes_are_off(self):
+        self.assertEqual(read_vendor_props().get("ro.vendor.hwc.use_overlay_planes"), "0")
+
+    @unittest.skipUnless(os.path.exists(os.path.join(TOP, "external", "drm_hwcomposer")),
+                         "sem o drm_hwcomposer no checkout")
+    def test_property_names_match_the_hwcomposer(self):
+        source = read(os.path.join(TOP, "external", "drm_hwcomposer", "utils", "properties.cpp"))
+        self.assertIn('"vendor.hwc.drm.scale_with_gpu"', source)
+        self.assertIn('"ro.vendor.hwc.use_overlay_planes"', source)
+
+
+class LargeScreenTest(unittest.TestCase):
+    """Rodada 15: com 160 dpi o painel de 1024x600 tem sw600dp, tela grande para o framework. Assim
+    o ignoreOrientationRequest vem ligado por padrão (DisplayContent.getIgnoreOrientationRequest) e
+    o OVERRIDE_ANY_ORIENTATION_TO_USER vale (AppCompatAspectRatioOverrides): a Netflix de celular
+    abre em paisagem, com o layout de tablet."""
+
+    OVERRIDES = os.path.join(TREE, "configs", "appcompat", "compat_framework_overrides.xml")
+    OVERRIDE_ANY_ORIENTATION_TO_USER = 310816437
+
+    def test_density_gives_sw600dp(self):
+        board = read(os.path.join(TREE, "BoardConfig.mk"))
+        density = int(re.search(r"(?m)^TARGET_SCREEN_DENSITY := (\d+)", board).group(1))
+        self.assertGreaterEqual(600 * 160 // density, 600)
+
+    def test_netflix_orientation_override(self):
+        root = ET.parse(self.OVERRIDES).getroot()
+        self.assertEqual(root.tag, "overrides")
+        changes = {int(c.get("changeId")): c for c in root.iter("change-overrides")}
+        raw = changes[self.OVERRIDE_ANY_ORIENTATION_TO_USER].find("raw")
+        packages = {v.get("packageName"): v.get("enabled") for v in raw.iter("raw-override-value")}
+        self.assertEqual(packages, {"com.netflix.mediaclient": "true"})
+
+    def test_overrides_go_to_the_static_product_path(self):
+        # CompatConfig lê os overrides estáticos de /product/etc/appcompat.
+        mk = read(os.path.join(TREE, "device.mk"))
+        self.assertIn("configs/appcompat/compat_framework_overrides.xml:"
+                      "$(TARGET_COPY_OUT_PRODUCT)/etc/appcompat/compat_framework_overrides.xml", mk)
+
+    @unittest.skipUnless(os.path.exists(os.path.join(TOP, "frameworks", "base")),
+                         "sem o frameworks/base no checkout")
+    def test_change_id_matches_the_framework(self):
+        source = read(os.path.join(TOP, "frameworks", "base", "core", "java", "android", "content",
+                                   "pm", "ActivityInfo.java"))
+        self.assertIn(f"OVERRIDE_ANY_ORIENTATION_TO_USER = {self.OVERRIDE_ANY_ORIENTATION_TO_USER}L",
+                      source)
+
+
 class SoftwareAv1Test(unittest.TestCase):
     """Rodada 14: o YouTube escolhia o AV1 de software (c2.android.av1-dav1d.decoder, media.swcodec a
     194 % de CPU) e o vídeo travava. O RK3566 não tem AV1 em hardware e os A55 não dão conta em
